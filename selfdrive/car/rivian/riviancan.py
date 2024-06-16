@@ -1,6 +1,6 @@
 def checksum(data, prefix, poly):
   crc = 0
-  data = [prefix] + data
+  data = bytes(prefix) + data
   for byte in data:
     crc ^= byte
     for _ in range(8):
