@@ -1,6 +1,5 @@
-import copy
 from cereal import car
-from openpilot.common.conversions import Conversions as CV
+from collections import deque
 from openpilot.selfdrive.car.interfaces import CarStateBase
 from opendbc.can.can_define import CANDefine
 from opendbc.can.parser import CANParser
@@ -12,7 +11,8 @@ class CarState(CarStateBase):
     super().__init__(CP)
     self.can_define = CANDefine(DBC[CP.carFingerprint]['pt'])
     self.button_states = {button.event_type: False for button in BUTTONS}
-    self.acc_enabled = None
+    self.steer_counters = deque(maxlen=32)
+    self.long_counters = deque(maxlen=32)
 
   def update(self, cp, cp_cam):
     ret = car.CarState.new_message()
@@ -36,8 +36,7 @@ class CarState(CarStateBase):
     ret.steeringTorque = cp.vl["EPAS_SystemStatus"]["EPAS_TorsionBarTorque"]
     ret.steeringPressed = abs(ret.steeringTorque) > 1.0
 
-    eac_status = self.can_define.dv["EPAS_AdasStatus"]["EPAS_EacStatus"].get(int(cp.vl["EPAS_AdasStatus"]["EPAS_EacStatus"]),None)
-    ret.steerFaultPermanent = eac_status in ["EPAS_EacStatus_Eac_Fault"]
+    ret.steerFaultPermanent = False
     eac_error = self.can_define.dv["EPAS_AdasStatus"]["EPAS_EacErrorCode"].get(int(cp.vl["EPAS_AdasStatus"]["EPAS_EacErrorCode"]), None)
     ret.steerFaultTemporary = eac_error not in ["EPAS_No_Err"]
 
@@ -48,7 +47,7 @@ class CarState(CarStateBase):
     ret.cruiseState.standstill = False  # This needs to be false, since we can resume from stop without sending anything special
 
     # Gear
-    ret.gearShifter = GEAR_MAP[self.can_define.dv["VDM_PropStatus"]["VDM_Prndl_Status"].get(int(cp.vl["VDM_PropStatus"]["VDM_Prndl_Status"]), "VDM_PRNDL_STATUS_NOT_DEFINED")]
+    ret.gearShifter = GEAR_MAP[int(cp.vl["VDM_PropStatus"]["VDM_Prndl_Status"])]
 
     # Buttons
     button_events = []
@@ -70,7 +69,7 @@ class CarState(CarStateBase):
     ret.rightBlinker = False
 
     # Seatbelt
-    ret.seatbeltUnlatched = cp.vl["RCM_Status"]["RCM_Status_IND_WARN_BELT_DRIVER"] != 0
+    ret.seatbeltUnlatched = False # cp.vl["RCM_Status"]["RCM_Status_IND_WARN_BELT_DRIVER"] != 0
 
     # Blindspot
     ret.leftBlindspot = False
@@ -80,7 +79,8 @@ class CarState(CarStateBase):
     ret.stockAeb = cp_cam.vl["ACM_AebRequest"]["ACM_EnableRequest"] == 1
 
     # Messages needed by carcontroller
-    self.acc_enabled = copy.copy(cp_cam.vl["ACM_longitudinalRequest"]["ACM_longInterfaceEnable"])
+    self.steer_counters.extend(cp_cam.vl_all["ACM_SteeringControl"]["ACM_SteeringControl_Counter"])
+    self.long_counters.extend(cp_cam.vl_all["ACM_longitudinalRequest"]["ACM_longitudinalRequest_Counter"])
 
     return ret
 
@@ -103,7 +103,8 @@ class CarState(CarStateBase):
   def get_cam_can_parser(CP):
     messages = [
       ("ACM_longitudinalRequest", 100),
-      ("ACM_AebRequest", 100)
+      ("ACM_AebRequest", 100),
+      ("ACM_SteeringControl", 100),
     ]
 
     return CANParser(DBC[CP.carFingerprint]["pt"], messages, 2)

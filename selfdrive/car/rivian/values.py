@@ -28,13 +28,13 @@ FW_QUERY_CONFIG = FwQueryConfig(
   ]
 )
 
-GEAR_MAP = {
-  "VDM_PRNDL_STATUS_NOT_DEFINED": car.CarState.GearShifter.unknown,
-  "VDM_PRNDL_STATUS_PARK": car.CarState.GearShifter.park,
-  "VDM_PRNDL_STATUS_REVERSE": car.CarState.GearShifter.reverse,
-  "VDM_PRNDL_STATUS_NEUTRAL": car.CarState.GearShifter.neutral,
-  "VDM_PRNDL_STATUS_DRIVE": car.CarState.GearShifter.drive,
-}
+GEAR_MAP = [
+  car.CarState.GearShifter.unknown,
+  car.CarState.GearShifter.park,
+  car.CarState.GearShifter.reverse,
+  car.CarState.GearShifter.neutral,
+  car.CarState.GearShifter.drive,
+]
 
 BUTTONS = [
   Button(car.CarState.ButtonEvent.Type.leftBlinker, "SCCM_leftStalk", "SCCM_turnIndicatorStalkStatus", [3, 4]),

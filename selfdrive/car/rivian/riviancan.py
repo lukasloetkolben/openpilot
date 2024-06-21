@@ -24,13 +24,13 @@ def create_steering_control(packer, frame, apply_steer, lkas):
   return packer.make_can_msg("ACM_SteeringControl", 0, values)
 
 
-def create_longitudinal_commands(packer, frame, accel, acc_enabled):
+def create_longitudinal_commands(packer, frame, accel, enabled):
   values = {
     "ACM_longitudinalRequest_Counter": frame % 15,
-    "ACM_AccelerationRequest": accel,
-    "ACM_VehicleHoldRequired": 0,  # todo
-    "ACM_PrndRequired": 0,  # todo
-    "ACM_longInterfaceEnable": acc_enabled,
+    "ACM_AccelerationRequest": accel if enabled else 0,
+    "ACM_VehicleHoldRequired": 0,
+    "ACM_PrndRequired": 0,
+    "ACM_longInterfaceEnable": 1 if enabled else 0,
     "ACM_AccelerationRequestType": 0,
   }
   data = packer.make_can_msg("ACM_longitudinalRequest", 0, values)[2]
