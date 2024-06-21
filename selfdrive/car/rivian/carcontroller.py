@@ -20,7 +20,7 @@ class CarController(CarControllerBase):
 
     # Lateral control
     apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgo, CarControllerParams)
-    apply_angle = clip(apply_angle, -60, 60)
+    apply_angle = clip(apply_angle, -90, 90)
     self.apply_angle_last = apply_angle
     while len(CS.steer_counters) > 0:
       can_sends.append(riviancan.create_steering_control(self.packer, CS.steer_counters.popleft() + 1, apply_angle, CC.latActive))
