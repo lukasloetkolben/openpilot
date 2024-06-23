@@ -22,6 +22,7 @@
 #include "tools/cabana/commands.h"
 #include "tools/cabana/streamselector.h"
 #include "tools/cabana/tools/findsignal.h"
+#include "tools/cabana/tools/findnewsignals.h"
 #include "tools/cabana/utils/export.h"
 #include "tools/replay/replay.h"
 
@@ -155,6 +156,7 @@ void MainWindow::createActions() {
   tools_menu = menuBar()->addMenu(tr("&Tools"));
   tools_menu->addAction(tr("Find &Similar Bits"), this, &MainWindow::findSimilarBits);
   tools_menu->addAction(tr("&Find Signal"), this, &MainWindow::findSignal);
+  tools_menu->addAction(tr("Find &New Signal"), this, &MainWindow::findNewSignals);
 
   // Help Menu
   QMenu *help_menu = menuBar()->addMenu(tr("&Help"));
@@ -192,6 +194,7 @@ void MainWindow::createDockWidgets() {
   video_splitter = new QSplitter(Qt::Vertical, this);
   video_widget = new VideoWidget(this);
   video_splitter->addWidget(video_widget);
+  QObject::connect(charts_widget, &ChartsWidget::rangeChanged, video_widget, &VideoWidget::updateTimeRange);
 
   video_splitter->addWidget(charts_container);
   video_splitter->setStretchFactor(1, 1);
@@ -629,6 +632,12 @@ void MainWindow::findSimilarBits() {
 void MainWindow::findSignal() {
   FindSignalDlg *dlg = new FindSignalDlg(this);
   QObject::connect(dlg, &FindSignalDlg::openMessage, messages_widget, &MessagesWidget::selectMessage);
+  dlg->show();
+}
+
+void MainWindow::findNewSignals() {
+  FindNewSignalsDlg *dlg = new FindNewSignalsDlg(this);
+  QObject::connect(dlg, &FindNewSignalsDlg::openMessage, messages_widget, &MessagesWidget::selectMessage);
   dlg->show();
 }
 
