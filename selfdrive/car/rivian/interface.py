@@ -21,7 +21,7 @@ class CarInterface(CarInterfaceBase):
 
     ret.openpilotLongitudinalControl = True
     flag = 0
-    #flag |= Panda.FLAG_RIVIAN_LONG_CONTROL
+    flag |= Panda.FLAG_RIVIAN_LONG_CONTROL
     ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.rivian, flag)]
 
     ret.steerLimitTimer = 1.0
