@@ -19,11 +19,16 @@ class CarController(CarControllerBase):
     can_sends = []
 
     # Lateral control
-    apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgo, CarControllerParams)
-    apply_angle = clip(apply_angle, -90, 90)
+    if CC.latActive:
+      apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgo, CarControllerParams)
+      apply_angle = clip(apply_angle, -90, 90)
+
+      while len(CS.steer_counters) > 0:
+        can_sends.append(riviancan.create_steering_control(self.packer, CS.steer_counters.popleft() + 1, apply_angle, CC.latActive))
+    else:
+      apply_angle = CS.out.steeringAngleDeg
+
     self.apply_angle_last = apply_angle
-    while len(CS.steer_counters) > 0:
-      can_sends.append(riviancan.create_steering_control(self.packer, CS.steer_counters.popleft() + 1, apply_angle, CC.latActive))
 
     # Longitudinal control
     if self.CP.openpilotLongitudinalControl:
