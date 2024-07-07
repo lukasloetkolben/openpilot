@@ -21,10 +21,10 @@ class CarController(CarControllerBase):
     # Lateral control
     if CC.latActive:
       apply_angle = apply_std_steer_angle_limits(actuators.steeringAngleDeg, self.apply_angle_last, CS.out.vEgo, CarControllerParams)
-      apply_angle = clip(apply_angle, -90, 90)
     else:
       apply_angle = CS.out.steeringAngleDeg
 
+    apply_angle = clip(apply_angle, -500, 500)
     self.apply_angle_last = apply_angle
 
     while len(CS.steer_counters) > 0:
