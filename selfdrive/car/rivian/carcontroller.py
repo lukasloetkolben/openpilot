@@ -24,7 +24,7 @@ class CarController(CarControllerBase):
     else:
       apply_angle = CS.out.steeringAngleDeg
 
-    apply_angle = clip(apply_angle, -500, 500)
+    apply_angle = clip(apply_angle, -488, 488)
     self.apply_angle_last = apply_angle
 
     while len(CS.steer_counters) > 0:

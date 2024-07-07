@@ -38,7 +38,7 @@ class CarState(CarStateBase):
 
     ret.steerFaultPermanent = False
     eac_error = self.can_define.dv["EPAS_AdasStatus"]["EPAS_EacErrorCode"].get(int(cp.vl["EPAS_AdasStatus"]["EPAS_EacErrorCode"]), None)
-    ret.steerFaultTemporary = eac_error not in ["EPAS_No_Err"]
+    ret.steerFaultTemporary = False # eac_error not in ["EPAS_No_Err"]
 
     # Cruise state
     ret.cruiseState.enabled = cp.vl["VDM_AdasSts"]["VDM_AdasDriverModeStatus"] == 1
