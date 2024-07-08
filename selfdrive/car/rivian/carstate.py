@@ -36,9 +36,9 @@ class CarState(CarStateBase):
     ret.steeringTorque = cp.vl["EPAS_SystemStatus"]["EPAS_TorsionBarTorque"]
     ret.steeringPressed = abs(ret.steeringTorque) > 1.0
 
-    ret.steerFaultPermanent = False
     eac_error = self.can_define.dv["EPAS_AdasStatus"]["EPAS_EacErrorCode"].get(int(cp.vl["EPAS_AdasStatus"]["EPAS_EacErrorCode"]), None)
-    ret.steerFaultTemporary = False # eac_error not in ["EPAS_No_Err"]
+    ret.steerFaultPermanent = False # EPAS_Feature_Status_Invalid_Err
+    ret.steerFaultTemporary = False # "EPAS_Angle_Control_Cntr_Err", EPAS_Angle_Control_Crc_Err
 
     # Cruise state
     ret.cruiseState.enabled = cp.vl["VDM_AdasSts"]["VDM_AdasDriverModeStatus"] == 1
