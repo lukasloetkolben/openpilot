@@ -1,7 +1,6 @@
 from cereal import car
 from collections import deque
 from openpilot.selfdrive.car.interfaces import CarStateBase
-from opendbc.can.can_define import CANDefine
 from opendbc.can.parser import CANParser
 from openpilot.selfdrive.car.rivian.values import DBC, GEAR_MAP, BUTTONS
 
@@ -9,7 +8,6 @@ from openpilot.selfdrive.car.rivian.values import DBC, GEAR_MAP, BUTTONS
 class CarState(CarStateBase):
   def __init__(self, CP):
     super().__init__(CP)
-    self.can_define = CANDefine(DBC[CP.carFingerprint]['pt'])
     self.button_states = {button.event_type: False for button in BUTTONS}
     self.steer_counters = deque(maxlen=32)
     self.long_counters = deque(maxlen=32)
@@ -36,12 +34,13 @@ class CarState(CarStateBase):
     ret.steeringTorque = cp.vl["EPAS_SystemStatus"]["EPAS_TorsionBarTorque"]
     ret.steeringPressed = abs(ret.steeringTorque) > 1.0
 
-    eac_error = self.can_define.dv["EPAS_AdasStatus"]["EPAS_EacErrorCode"].get(int(cp.vl["EPAS_AdasStatus"]["EPAS_EacErrorCode"]), None)
-    ret.steerFaultPermanent = False # EPAS_Feature_Status_Invalid_Err
+    # 5 = EPAS_Feature_Status_Invalid_Err
+    ret.steerFaultPermanent = cp.vl["EPAS_AdasStatus"]["EPAS_InternalSas"] in (5)
     ret.steerFaultTemporary = False # "EPAS_Angle_Control_Cntr_Err", EPAS_Angle_Control_Crc_Err
 
     # Cruise state
-    ret.cruiseState.enabled = cp.vl["VDM_AdasSts"]["VDM_AdasDriverModeStatus"] == 1
+    # ret.cruiseState.enabled = cp.vl["VDM_AdasSts"]["VDM_AdasDriverModeStatus"] == 1
+    ret.cruiseState.enabled = cp.vl["ACM_Status"]["ACM_FeatureStatus"] == 2
     ret.cruiseState.speed = cp.vl["ESPiB1"]["ESPiB1_VehicleSpeed"] # todo
     ret.cruiseState.available = cp.vl["VDM_AdasSts"]["VDM_AdasInterfaceStatus"] == 1
     ret.cruiseState.standstill = False  # This needs to be false, since we can resume from stop without sending anything special
@@ -105,6 +104,7 @@ class CarState(CarStateBase):
       ("ACM_longitudinalRequest", 100),
       ("ACM_AebRequest", 100),
       ("ACM_SteeringControl", 100),
+      ("ACM_Status", 100)
     ]
 
     return CANParser(DBC[CP.carFingerprint]["pt"], messages, 2)
