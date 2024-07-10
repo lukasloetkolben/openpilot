@@ -28,8 +28,9 @@ class CarController(CarControllerBase):
     self.apply_angle_last = apply_angle
 
     while len(CS.steer_counters) > 0:
-      can_sends.append(
-        riviancan.create_steering_control(self.packer, CS.steer_counters.popleft() + 1, apply_angle, CC.latActive))
+      can_sends.append(riviancan.create_steering_control(self.packer, CS.steer_counters.popleft() + 1, apply_angle, CC.latActive))
+
+    can_sends.append(riviancan.create_acm_status(self.packer, CS.acm_fault_status, CS.acm_feature_status, self.frame, CC.latActive))
 
     # Longitudinal control
     if self.CP.openpilotLongitudinalControl:

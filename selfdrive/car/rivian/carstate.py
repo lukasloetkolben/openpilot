@@ -11,6 +11,8 @@ class CarState(CarStateBase):
     self.button_states = {button.event_type: False for button in BUTTONS}
     self.steer_counters = deque(maxlen=32)
     self.long_counters = deque(maxlen=32)
+    self.acm_fault_status = 0
+    self.acm_feature_status = 0
 
   def update(self, cp, cp_cam):
     ret = car.CarState.new_message()
@@ -80,6 +82,8 @@ class CarState(CarStateBase):
     # Messages needed by carcontroller
     self.steer_counters.extend(cp_cam.vl_all["ACM_SteeringControl"]["ACM_SteeringControl_Counter"])
     self.long_counters.extend(cp_cam.vl_all["ACM_longitudinalRequest"]["ACM_longitudinalRequest_Counter"])
+    self.acm_fault_status = cp_cam.vl["ACM_Status"]["ACM_FaultStatus"]
+    self.acm_feature_status = cp_cam.vl["ACM_Status"]["ACM_FeatureStatus"]
 
     return ret
 
@@ -104,7 +108,7 @@ class CarState(CarStateBase):
       ("ACM_longitudinalRequest", 100),
       ("ACM_AebRequest", 100),
       ("ACM_SteeringControl", 100),
-      ("ACM_Status", 100)
+      ("ACM_Status", 100),
     ]
 
     return CANParser(DBC[CP.carFingerprint]["pt"], messages, 2)
