@@ -37,7 +37,7 @@ class CarState(CarStateBase):
     ret.steeringPressed = abs(ret.steeringTorque) > 1.0
 
     # 5 = EPAS_Feature_Status_Invalid_Err
-    ret.steerFaultPermanent = cp.vl["EPAS_AdasStatus"]["EPAS_InternalSas"] in (5)
+    ret.steerFaultPermanent = cp.vl["EPAS_AdasStatus"]["EPAS_EacErrorCode"] in (5)
     ret.steerFaultTemporary = False # "EPAS_Angle_Control_Cntr_Err", EPAS_Angle_Control_Crc_Err
 
     # Cruise state
