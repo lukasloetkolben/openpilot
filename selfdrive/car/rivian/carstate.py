@@ -77,7 +77,7 @@ class CarState(CarStateBase):
     ret.rightBlindspot = False
 
     # AEB
-    ret.stockAeb = cp_cam.vl["ACM_AebRequest"]["ACM_EnableRequest"] == 1
+    ret.stockAeb = cp_cam.vl["ACM_AebRequest"]["ACM_EnableRequest"] != 0
 
     # Messages needed by carcontroller
     self.steer_counters.extend(cp_cam.vl_all["ACM_SteeringControl"]["ACM_SteeringControl_Counter"])
