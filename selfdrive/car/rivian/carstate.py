@@ -39,8 +39,8 @@ class CarState(CarStateBase):
     ret.steerFaultTemporary = False # "EPAS_Angle_Control_Cntr_Err", EPAS_Angle_Control_Crc_Err
 
     # Cruise state
-    # ret.cruiseState.enabled = cp.vl["VDM_AdasSts"]["VDM_AdasDriverModeStatus"] == 1
-    ret.cruiseState.enabled = cp.vl["ACM_Status"]["ACM_FeatureStatus"] == 2
+    ret.cruiseState.enabled = cp.vl["VDM_AdasSts"]["VDM_AdasDriverModeStatus"] == 1
+    # ret.cruiseState.enabled = cp.vl["ACM_Status"]["ACM_FeatureStatus"] == 2
     ret.cruiseState.speed = cp.vl["ESPiB1"]["ESPiB1_VehicleSpeed"] # todo
     ret.cruiseState.available = cp.vl["VDM_AdasSts"]["VDM_AdasInterfaceStatus"] == 1
     ret.cruiseState.standstill = False  # This needs to be false, since we can resume from stop without sending anything special
