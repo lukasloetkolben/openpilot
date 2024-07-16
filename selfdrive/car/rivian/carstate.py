@@ -11,6 +11,7 @@ class CarState(CarStateBase):
     self.button_states = {button.event_type: False for button in BUTTONS}
     self.steer_counters = deque(maxlen=32)
     self.long_counters = deque(maxlen=32)
+    self.acm_status_counter = 0
     self.acm_fault_status = 0
     self.acm_feature_status = 0
 
@@ -84,7 +85,7 @@ class CarState(CarStateBase):
     self.long_counters.extend(cp_cam.vl_all["ACM_longitudinalRequest"]["ACM_longitudinalRequest_Counter"])
     self.acm_fault_status = cp_cam.vl["ACM_Status"]["ACM_FaultStatus"]
     self.acm_feature_status = cp_cam.vl["ACM_Status"]["ACM_FeatureStatus"]
-
+    self.acm_status_counter = cp_cam.vl["ACM_Status"]["ACM_Status_Counter"]
     return ret
 
   @staticmethod

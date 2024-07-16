@@ -23,16 +23,16 @@ def create_steering_control(packer, frame, apply_steer, lkas):
   values["ACM_SteeringControl_Checksum"] = crc8(data[1:], 0x1D, 0x41)
   return packer.make_can_msg("ACM_SteeringControl", 0, values)
 
-def create_acm_status(packer, acm_fault_status, acm_feature_status, frame, lkas):
+def create_acm_status(packer, bus, acm_fault_status, acm_feature_status, counter, lkas):
   values = {
-    "ACM_Status_Counter": frame % 15,
+    "ACM_Status_Counter": counter % 15,
     "ACM_FeatureStatus": 2 if lkas else acm_feature_status,
     "ACM_FaultStatus": acm_fault_status,
   }
 
-  data = packer.make_can_msg("ACM_Status", 0, values)[2]
+  data = packer.make_can_msg("ACM_Status", bus, values)[2]
   values["ACM_Status_Checksum"] = crc8(data[1:], 0x1D, 0x5F)
-  return packer.make_can_msg("ACM_Status", 0, values)
+  return packer.make_can_msg("ACM_Status", bus, values)
 
 def create_longitudinal_commands(packer, frame, accel, enabled):
   values = {
