@@ -32,7 +32,7 @@ class CarController(CarControllerBase):
 
     can_sends.append(riviancan.create_acm_status(self.packer,0, CS.acm_fault_status, CS.acm_feature_status, CS.acm_status_counter + 1, CC.latActive))
     can_sends.append(riviancan.create_acm_status(self.packer,1, CS.acm_fault_status, CS.acm_feature_status, CS.acm_status_counter + 2, CC.latActive))
-    can_sends.append(riviancan.create_acm_lka_hba_cmd(self.packer, CS.acm_lka_hba_cmd, CS.out.vEgo > 4))
+    can_sends.append(riviancan.create_acm_lka_hba_cmd(self.packer, CS.acm_lka_hba_cmd))
 
     # Longitudinal control
     if self.CP.openpilotLongitudinalControl:
