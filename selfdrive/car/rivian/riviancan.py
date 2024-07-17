@@ -48,6 +48,38 @@ def create_longitudinal_commands(packer, frame, accel, enabled):
   return packer.make_can_msg("ACM_longitudinalRequest", 0, values)
 
 
+def create_acm_lka_hba_cmd(packer, acm_lka_hba_cmd, counter, available):
+    values = {s: acm_lka_hba_cmd[s] for s in [
+    "ACM_lkaHbaCmd_Checksum",
+    "ACM_lkaHbaCmd_Counter",
+    "ACM_unkown1",
+    "ACM_HapticRequest",
+    "ACM_lkaStrToqReq",
+    "ACM_lkaSymbolState",
+    "ACM_lkaToiFlt",
+    "ACM_lkaActToi",
+    "ACM_hbaSysState",
+    "ACM_FailinfoAeb",
+    "ACM_unkown2",
+    "ACM_lkaRHWarning",
+    "ACM_lkaLHWarning",
+    "ACM_lkaLaneRecogState",
+    "ACM_hbaOpt",
+    "ACM_hbaLamp",
+    "ACM_unkown3",
+    "ACM_lkaHandsoffSoundWarning",
+    "ACM_lkaHandsoffDisplayWarning",
+    "ACM_unkown4"
+    ]}
+
+    if available:
+      values["ACM_lkaHbaCmd_Counter"] = counter % 15
+      values["ACM_lkaLaneRecogState"] = 3
+
+    data = packer.make_can_msg("ACM_lkaHbaCmd", 0, values)[2]
+    values["ACM_lkaHbaCmd_Checksum"] = crc8(data[1:], 0x1D, 0x12)
+    return packer.make_can_msg("ACM_lkaHbaCmd_Checksum", 0, values)
+
 def create_button_cmd(packer, frame, button):
   values = {}
 
