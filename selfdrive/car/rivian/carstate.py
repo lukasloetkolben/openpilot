@@ -3,6 +3,7 @@ from collections import deque
 from openpilot.selfdrive.car.interfaces import CarStateBase
 from opendbc.can.parser import CANParser
 from openpilot.selfdrive.car.rivian.values import DBC, GEAR_MAP, BUTTONS
+import copy
 
 
 class CarState(CarStateBase):
@@ -14,6 +15,7 @@ class CarState(CarStateBase):
     self.acm_status_counter = 0
     self.acm_fault_status = 0
     self.acm_feature_status = 0
+    self.acm_lka_hba_cmd = None
 
   def update(self, cp, cp_cam):
     ret = car.CarState.new_message()
@@ -86,6 +88,8 @@ class CarState(CarStateBase):
     self.acm_fault_status = cp_cam.vl["ACM_Status"]["ACM_FaultStatus"]
     self.acm_feature_status = cp_cam.vl["ACM_Status"]["ACM_FeatureStatus"]
     self.acm_status_counter = cp_cam.vl["ACM_Status"]["ACM_Status_Counter"]
+    self.acm_lka_hba_cmd = copy.copy(cp_cam.vl["ACM_lkaHbaCmd"])
+
     return ret
 
   @staticmethod
@@ -110,6 +114,7 @@ class CarState(CarStateBase):
       ("ACM_AebRequest", 100),
       ("ACM_SteeringControl", 100),
       ("ACM_Status", 100),
+      ("ACM_lkaHbaCmd", 100)
     ]
 
     return CANParser(DBC[CP.carFingerprint]["pt"], messages, 2)
