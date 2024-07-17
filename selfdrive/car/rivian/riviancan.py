@@ -78,7 +78,7 @@ def create_acm_lka_hba_cmd(packer, acm_lka_hba_cmd, available):
 
     data = packer.make_can_msg("ACM_lkaHbaCmd", 0, values)[2]
     values["ACM_lkaHbaCmd_Checksum"] = crc8(data[1:], 0x1D, 0x63)
-    return packer.make_can_msg("ACM_lkaHbaCmd_Checksum", 0, values)
+    return packer.make_can_msg("ACM_lkaHbaCmd", 0, values)
 
 def create_button_cmd(packer, frame, button):
   values = {}
