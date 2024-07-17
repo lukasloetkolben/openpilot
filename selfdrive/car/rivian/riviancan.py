@@ -72,7 +72,7 @@ def create_acm_lka_hba_cmd(packer, acm_lka_hba_cmd, available):
     "ACM_unkown4"
     ]}
 
-    values["ACM_lkaHbaCmd_Counter"] = (int(acm_lka_hba_cmd) + 1) % 15
+    values["ACM_lkaHbaCmd_Counter"] = (acm_lka_hba_cmd["ACM_lkaHbaCmd_Counter"] + 1) % 15
     if available:
       values["ACM_lkaLaneRecogState"] = 3
 
