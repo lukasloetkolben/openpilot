@@ -28,7 +28,7 @@ class CarController(CarControllerBase):
     self.apply_angle_last = apply_angle
 
     while len(CS.steer_counters) > 0:
-      can_sends.append(riviancan.create_steering_control(self.packer, CS.steer_counters.popleft() + 1, apply_angle, CC.latActive))
+      can_sends.append(riviancan.create_steering_control(self.packer, CS.steer_counters.popleft() + 2, apply_angle, CC.latActive))
 
     can_sends.append(riviancan.create_acm_status(self.packer,0, CS.acm_fault_status, CS.acm_feature_status, CS.acm_status_counter + 1, CC.latActive))
     can_sends.append(riviancan.create_acm_status(self.packer,1, CS.acm_fault_status, CS.acm_feature_status, CS.acm_status_counter + 2, CC.latActive))
