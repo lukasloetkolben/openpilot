@@ -23,8 +23,14 @@ class CarState(CarStateBase):
     ret = car.CarState.new_message()
 
     # Vehicle speed
+    ui_speed_units = self.can_define.dv["DI_speed"]["DI_uiSpeedUnits"].get(int(cp.vl["DI_speed"]["DI_uiSpeedUnits"]), None)
+
     ret.vEgoRaw = cp.vl["ESP_B"]["ESP_vehicleSpeed"] * CV.KPH_TO_MS
     ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
+    if ui_speed_units == "KPH":
+      ret.vEgoCluster = cp.vl["DI_speed"]["DI_uiSpeed"] * CV.KPH_TO_MS
+    elif ui_speed_units == "MPH":
+      ret.vEgoCluster = cp.vl["DI_speed"]["DI_uiSpeed"] * CV.MPH_TO_MS
     ret.standstill = (ret.vEgo < 0.1)
 
     # Gas pedal
@@ -105,6 +111,7 @@ class CarState(CarStateBase):
     messages = [
       # sig_address, frequency
       ("ESP_B", 50),
+      ("DI_speed", 100),
       ("DI_systemStatus", 100),
       ("IBST_status", 25),
       ("DI_state", 10),
