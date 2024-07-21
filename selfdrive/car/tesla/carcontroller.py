@@ -26,7 +26,7 @@ class CarController(CarControllerBase):
       self.first_cc_cancel_nanos = now_nanos
     if not CC.cruiseControl.cancel:
       self.first_cc_cancel_nanos = None
-    pcm_cancel_cmd = CC.cruiseControl.cancel and now_nanos - self.first_cc_cancel_nanos > 250000  # 250ms
+    pcm_cancel_cmd = CC.cruiseControl.cancel and now_nanos - self.first_cc_cancel_nanos > 1e9  # 1s
 
     can_sends = []
 
