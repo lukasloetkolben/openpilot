@@ -14,11 +14,19 @@ class CarController(CarControllerBase):
     self.packer = CANPacker(dbc_name)
     self.pt_packer = CANPacker(DBC[CP.carFingerprint]['pt'])
     self.tesla_can = TeslaCAN(self.packer, self.pt_packer)
+    self.first_cc_cancel_nanos = None
 
   def update(self, CC, CS, now_nanos):
 
     actuators = CC.actuators
-    pcm_cancel_cmd = CC.cruiseControl.cancel
+    # OEM system should automatically cancel, we'll only send cancel cmd as a backup.
+    # Timer is necessary due to race condition between state and control, sending cancel
+    # when not necessary results in a dashboard alert.
+    if CC.cruiseControl.cancel and self.first_cc_cancel_nanos is None:
+      self.first_cc_cancel_nanos = now_nanos
+    if not CC.cruiseControl.cancel:
+      self.first_cc_cancel_nanos = None
+    pcm_cancel_cmd = CC.cruiseControl.cancel and now_nanos - self.first_cc_cancel_nanos > 1e9  # 1s
 
     can_sends = []
 
@@ -51,14 +59,12 @@ class CarController(CarControllerBase):
       can_sends.append(self.tesla_can.create_longitudinal_commands(acc_state, target_speed, min_accel, max_accel, counter))
 
     # Cancel on user steering override, since there is no steering torque blending
-    if hands_on_fault:
+    if hands_on_fault and CS.acc_enabled:
       pcm_cancel_cmd = True
 
-    # Sent cancel request only if ACC is enabled
-    if self.frame % 10 == 0 and pcm_cancel_cmd and CS.acc_enabled:
+    if self.frame % 10 == 0 and pcm_cancel_cmd:
       counter = int(CS.sccm_right_stalk_counter)
       can_sends.append(self.tesla_can.right_stalk_press((counter + 1) % 16 , 1))  # half up (cancel acc)
-      can_sends.append(self.tesla_can.right_stalk_press((counter + 2) % 16, 0))  # to prevent neutral gear warning
 
     # TODO: HUD control
 
