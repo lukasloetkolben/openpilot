@@ -767,7 +767,7 @@ class FrogPilotVariables:
       toggle.conditional_navigation_intersections = toggle.conditional_navigation and self.default_frogpilot_toggles.CENavigationIntersections
       toggle.conditional_navigation_lead = toggle.conditional_navigation and self.default_frogpilot_toggles.CENavigationLead
       toggle.conditional_navigation_turns = toggle.conditional_navigation and self.default_frogpilot_toggles.CENavigationTurns
-      toggle.conditional_model_stop_time = self.default_frogpilot_toggles.CEModelStopTime if toggle.conditional_experimental_mode else 0
+      toggle.conditional_model_stop_time = int(self.default_frogpilot_toggles.CEModelStopTime if toggle.conditional_experimental_mode else 0)
       toggle.conditional_signal = self.default_frogpilot_toggles.CESignalSpeed if toggle.conditional_experimental_mode else 0
       toggle.conditional_signal_lane_detection = toggle.conditional_signal != 0 and self.default_frogpilot_toggles.CESignalLaneDetection
       toggle.conditional_status_bar = toggle.conditional_experimental_mode and not self.default_frogpilot_toggles.HideCEMStatusBar
