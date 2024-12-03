@@ -209,6 +209,10 @@ class LONGController:
                     CS.alca_direction > 0,
                     radar_state
                 )
+
+                if target_accel > -0.3:
+                    self.apply_brake = 0
+
                 #send pedal commands at 50Hz
                 if (accel_needed > -1) and (accel_idx > -1) and frame % 2 == 0:
                     messages.append(
