@@ -18,7 +18,7 @@ class CarInterface(CarInterfaceBase):
 
     ret.steerControlType = car.CarParams.SteerControlType.angle
 
-    ret.longitudinalActuatorDelay = 0.5 # s
+    ret.longitudinalActuatorDelay = 0.15 # s
     ret.radarUnavailable = True
 
     if candidate in [CAR.TESLA_AP3_MODEL3, CAR.TESLA_AP3_MODELY]:
@@ -30,7 +30,7 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.tesla, flags)]
 
     ret.steerLimitTimer = 1.0
-    ret.steerActuatorDelay = 0.25
+    ret.steerActuatorDelay = 0.1
     return ret
 
   def _update(self, c, frogpilot_toggles):
