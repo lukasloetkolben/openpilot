@@ -4,7 +4,8 @@ import tempfile
 import contextlib
 import zstandard as zstd
 
-LOG_COMPRESSION_LEVEL = 10  # little benefit up to level 15. level ~17 is a small step change
+LOG_COMPRESSION_LEVEL = 10 # little benefit up to level 15. level ~17 is a small step change
+
 
 class CallbackReader:
   """Wraps a file, but overrides the read method to also
@@ -40,14 +41,18 @@ def atomic_write_in_dir(path: str, mode: str = 'w', buffering: int = -1, encodin
   os.replace(tmp_file_name, path)
 
 
-def get_upload_stream(filepath: str, compress: bool) -> io.BufferedReader | io.BytesIO:
-  if not compress:
-    return open(filepath, "rb")
+def get_upload_stream(filepath: str, should_compress: bool) -> tuple[io.BufferedIOBase, int]:
+  if not should_compress:
+    file_size = os.path.getsize(filepath)
+    file_stream = open(filepath, "rb")
+    return file_stream, file_size
 
-  # Compress the file on the fly and return a BytesIO stream
-  stream = io.BytesIO()
+  # Compress the file on the fly
+  compressed_stream = io.BytesIO()
   compressor = zstd.ZstdCompressor(level=LOG_COMPRESSION_LEVEL)
+
   with open(filepath, "rb") as f:
-    compressor.copy_stream(f, stream)
-  stream.seek(0)
-  return stream
+    compressor.copy_stream(f, compressed_stream)
+    compressed_size = compressed_stream.tell()
+    compressed_stream.seek(0)
+    return compressed_stream, compressed_size

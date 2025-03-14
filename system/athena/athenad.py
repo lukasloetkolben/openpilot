@@ -292,14 +292,17 @@ def _do_upload(upload_item: UploadItem, callback: Callable = None) -> requests.R
     path = strip_zst_extension(path)
     compress = True
 
-  with get_upload_stream(path, compress) as stream:
-    stream.seek(0, os.SEEK_END)
-    content_length = stream.tell()
-    stream.seek(0)
-    return requests.put(upload_item.url,
-                        data=CallbackReader(stream, callback, content_length) if callback else stream,
-                        headers={**upload_item.headers, 'Content-Length': str(content_length)},
-                        timeout=30)
+  stream = None
+  try:
+    stream, content_length = get_upload_stream(path, compress)
+    response = requests.put(upload_item.url,
+                            data=CallbackReader(stream, callback, content_length) if callback else stream,
+                            headers={**upload_item.headers, 'Content-Length': str(content_length)},
+                            timeout=30)
+    return response
+  finally:
+    if stream:
+      stream.close()
 
 
 # security: user should be able to request any message from their car
@@ -504,10 +507,6 @@ def getSshAuthorizedKeys() -> str:
 @dispatcher.add_method
 def getGithubUsername() -> str:
   return Params().get("GithubUsername", encoding='utf8') or ''
-
-@dispatcher.add_method
-def getFirehoseMode() -> bool:
-  return Params().get_bool("FirehoseMode") or False
 
 @dispatcher.add_method
 def getSimInfo():

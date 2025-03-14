@@ -152,9 +152,15 @@ class Uploader:
     if fake_upload:
       return FakeResponse()
 
-    compress = key.endswith('.zst') and not fn.endswith('.zst')
-    with get_upload_stream(fn, compress) as stream:
-      return requests.put(url, data=stream, headers=headers, timeout=10)
+    stream = None
+    try:
+      compress = key.endswith('.zst') and not fn.endswith('.zst')
+      stream, _ = get_upload_stream(fn, compress)
+      response = requests.put(url, data=stream, headers=headers, timeout=10)
+      return response
+    finally:
+      if stream:
+        stream.close()
 
   def upload(self, name: str, key: str, fn: str, network_type: int, metered: bool) -> bool:
     try:
