@@ -146,11 +146,18 @@ void MainWindow::createActions() {
   tools_menu = menuBar()->addMenu(tr("&Tools"));
   tools_menu->addAction(tr("Find &Similar Bits"), this, &MainWindow::findSimilarBits);
   tools_menu->addAction(tr("&Find Signal"), this, &MainWindow::findSignal);
+  tools_menu->addAction(tr("Find &New Signals"), this, &MainWindow::findNewSignals);
 
   // Help Menu
   QMenu *help_menu = menuBar()->addMenu(tr("&Help"));
   help_menu->addAction(tr("Help"), this, &MainWindow::onlineHelp, QKeySequence::HelpContents);
   help_menu->addAction(tr("About &Qt"), qApp, &QApplication::aboutQt);
+}
+
+void MainWindow::findNewSignals() {
+  FindNewSignalsDlg *dlg = new FindNewSignalsDlg(this);
+  QObject::connect(dlg, &FindNewSignalsDlg::openMessage, messages_widget, &MessagesWidget::selectMessage);
+  dlg->show();
 }
 
 void MainWindow::createDockWindows() {

@@ -15,6 +15,7 @@
 #include "tools/cabana/messageswidget.h"
 #include "tools/cabana/videowidget.h"
 #include "tools/cabana/tools/findsimilarbits.h"
+#include "tools/cabana/tools/findnewsignals.h"
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
@@ -65,6 +66,7 @@ protected:
   void setOption();
   void findSimilarBits();
   void findSignal();
+  void findNewSignals();
   void undoStackCleanChanged(bool clean);
   void onlineHelp();
   void toggleFullScreen();
