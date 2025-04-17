@@ -1,6 +1,9 @@
 #pragma once
 
 #include <QPushButton>
+#include <QWidget>
+#include <QLabel>
+#include <memory>
 
 #include "selfdrive/ui/ui.h"
 
@@ -11,7 +14,7 @@ class ExperimentalButton : public QPushButton {
   Q_OBJECT
 
 public:
-  explicit ExperimentalButton(QWidget *parent = 0);
+  explicit ExperimentalButton(QWidget *parent = nullptr);
   void updateState(const UIState &s);
 
 private:
@@ -23,6 +26,20 @@ private:
   QPixmap experimental_img;
   bool experimental_mode;
   bool engageable;
+};
+
+class SpeedControl : public QWidget {
+  Q_OBJECT
+
+public:
+  explicit SpeedControl(QWidget *parent = nullptr);
+
+private:
+  std::unique_ptr<PubMaster> pm;
+  uint32_t speed;
+  QString setSpeedValue;
+  QPushButton *decreaseButton;
+  QPushButton *increaseButton;
 };
 
 void drawIcon(QPainter &p, const QPoint &center, const QPixmap &img, const QBrush &bg, float opacity);

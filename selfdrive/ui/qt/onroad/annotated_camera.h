@@ -18,6 +18,7 @@ public:
 private:
   QVBoxLayout *main_layout;
   ExperimentalButton *experimental_btn;
+  SpeedControl *speed_control_btn;
   DriverMonitorRenderer dmon;
   HudRenderer hud;
   ModelRenderer model;
