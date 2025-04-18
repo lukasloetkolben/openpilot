@@ -54,7 +54,7 @@ void ExperimentalButton::paintEvent(QPaintEvent *event) {
 
 // SpeedControl
 SpeedControl::SpeedControl(QWidget *parent) : QWidget(parent), speed(30) {
-  pm = std::make_unique<PubMaster>(std::vector<const char*>{"uiSetValues"});
+  pm = std::make_unique<PubMaster>(std::vector<const char*>{"uiSetSpeed"});
 
   QHBoxLayout *layout = new QHBoxLayout(this);
   layout->setContentsMargins(0, 0, 0, 0);
@@ -87,23 +87,32 @@ SpeedControl::SpeedControl(QWidget *parent) : QWidget(parent), speed(30) {
   increaseButton->setStyleSheet(buttonStyleSheet);
   layout->addWidget(increaseButton);
 
-  QObject::connect(increaseButton, &QPushButton::clicked, [this]() {
-    speed = std::clamp<int>(speed + 5, 5, 90);
-    setSpeedValue = QString::number(speed);
-
+  QObject::connect(increaseButton, &QPushButton::pressed, [this]() {
     MessageBuilder msg;
-    auto m = msg.initEvent().initUiSetValues();
-    m.setUiSetSpeed(speed);
-    pm->send("uiSetValues", msg);
+    auto m = msg.initEvent().initUiSetSpeed();
+    m.setButtonSignal(1);
+    pm->send("uiSetSpeed", msg);
   });
 
-  QObject::connect(decreaseButton, &QPushButton::clicked, [this]() {
-    speed = std::clamp<int>(speed - 5, 5, 90);
-    setSpeedValue = QString::number(speed);
+  QObject::connect(increaseButton, &QPushButton::released, [this]() {
     MessageBuilder msg;
-    auto m = msg.initEvent().initUiSetValues();
-    m.setUiSetSpeed(speed);
-    pm->send("uiSetValues", msg);
+    auto m = msg.initEvent().initUiSetSpeed();
+    m.setButtonSignal(0);
+    pm->send("uiSetSpeed", msg);
+  });
+
+  QObject::connect(decreaseButton, &QPushButton::pressed, [this]() {
+    MessageBuilder msg;
+    auto m = msg.initEvent().initUiSetSpeed();
+    m.setButtonSignal(-1);
+    pm->send("uiSetSpeed", msg);
+  });
+
+  QObject::connect(decreaseButton, &QPushButton::released, [this]() {
+    MessageBuilder msg;
+    auto m = msg.initEvent().initUiSetSpeed();
+    m.setButtonSignal(0);
+    pm->send("uiSetSpeed", msg);
   });
 
   setLayout(layout);

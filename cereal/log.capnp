@@ -2341,8 +2341,8 @@ struct UIDebug {
   drawTimeMillis @0 :Float32;
 }
 
-struct UiSetValues {
-  uiSetSpeed @0 :Int16;
+struct UiSetSpeed {
+  buttonSignal @0 :Int16;
 }
 
 struct ManagerState {
@@ -2576,7 +2576,7 @@ struct Event {
     # UI services
     userFlag @93 :UserFlag;
     uiDebug @102 :UIDebug;
-    uiSetValues @147 :UiSetValues;
+    uiSetSpeed @147 :UiSetSpeed;
 
     # *********** debug ***********
     testJoystick @52 :Joystick;

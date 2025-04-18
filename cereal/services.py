@@ -77,7 +77,7 @@ _services: dict[str, tuple] = {
 
   # debug
   "uiDebug": (True, 0., 1),
-  "uiSetValues": (False, 10., 1),
+  "uiSetSpeed": (False, 10., 1),
   "testJoystick": (True, 0.),
   "alertDebug": (True, 20., 5),
   "roadEncodeData": (False, 20.),
