@@ -269,17 +269,18 @@ FrogPilotVisualsPanel::FrogPilotVisualsPanel(FrogPilotSettingsWindow *parent) : 
       visualToggle = new FrogPilotButtonToggleControl(param, title, desc, icon, mapToggles, mapToggleNames);
     } else if (param == "MapStyle") {
       QMap<int, QString> styleMap {
-        {0, tr("Stock")},
-        {1, tr("Mapbox Streets")},
-        {2, tr("Mapbox Outdoors")},
-        {3, tr("Mapbox Light")},
-        {4, tr("Mapbox Dark")},
-        {7, tr("Mapbox Navigation Day")},
-        {8, tr("Mapbox Navigation Night")},
-        {5, tr("Mapbox Satellite")},
-        {6, tr("Mapbox Satellite Streets")},
-        {9, tr("Mapbox Traffic Night")},
-        {10, tr("mike854's (Satellite hybrid)")}
+        {0, tr("Stock openpilot")},
+        {1, tr("FrogsGoMoo's Personalized Style")},
+        {2, tr("Mapbox Streets")},
+        {3, tr("Mapbox Outdoors")},
+        {4, tr("Mapbox Light")},
+        {5, tr("Mapbox Dark")},
+        {6, tr("Mapbox Navigation Day")},
+        {7, tr("Mapbox Navigation Night")},
+        {8, tr("Mapbox Satellite")},
+        {9, tr("Mapbox Satellite Streets")},
+        {10, tr("Mapbox Traffic Night")},
+        {11, tr("Mike's Personalized Style")}
       };
 
       ButtonControl *mapStyleButton = new ButtonControl(title, tr("SELECT"), desc);

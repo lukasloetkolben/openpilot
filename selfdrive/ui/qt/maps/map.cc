@@ -310,18 +310,19 @@ void MapWindow::updateState(const UIState &s) {
   int map_style = frogpilotUIState()->frogpilot_toggles.value("map_style").toInt();
 
   if (map_style != previous_map_style) {
-    std::array<std::string, 11> styleUrls = {
-      "mapbox://styles/commaai/clkqztk0f00ou01qyhsa5bzpj",  // Stock openpilot
-      "mapbox://styles/mapbox/streets-v11",                 // Mapbox Streets
-      "mapbox://styles/mapbox/outdoors-v11",                // Mapbox Outdoors
-      "mapbox://styles/mapbox/light-v10",                   // Mapbox Light
-      "mapbox://styles/mapbox/dark-v10",                    // Mapbox Dark
-      "mapbox://styles/mapbox/navigation-day-v1",           // Mapbox Navigation Day
-      "mapbox://styles/mapbox/navigation-night-v1",         // Mapbox Navigation Night
-      "mapbox://styles/mapbox/satellite-v9",                // Mapbox Satellite
-      "mapbox://styles/mapbox/satellite-streets-v11",       // Mapbox Satellite Streets
-      "mapbox://styles/mapbox/traffic-night-v2",            // Mapbox Traffic Night
-      "mapbox://styles/mike854/clt0hm8mw01ok01p4blkr27jp"   // mike854's (Satellite hybrid)
+    std::array<std::string, 12> styleUrls = {
+      "mapbox://styles/commaai/clkqztk0f00ou01qyhsa5bzpj",     // Stock openpilot
+      "mapbox://styles/frogsgomoo/cmcfv151j000o01rcdxebhl76",  // FrogsGoMoo's Personalized Style
+      "mapbox://styles/mapbox/streets-v11",                    // Mapbox Streets
+      "mapbox://styles/mapbox/outdoors-v11",                   // Mapbox Outdoors
+      "mapbox://styles/mapbox/light-v10",                      // Mapbox Light
+      "mapbox://styles/mapbox/dark-v10",                       // Mapbox Dark
+      "mapbox://styles/mapbox/navigation-day-v1",              // Mapbox Navigation Day
+      "mapbox://styles/mapbox/navigation-night-v1",            // Mapbox Navigation Night
+      "mapbox://styles/mapbox/satellite-v9",                   // Mapbox Satellite
+      "mapbox://styles/mapbox/satellite-streets-v11",          // Mapbox Satellite Streets
+      "mapbox://styles/mapbox/traffic-night-v2",               // Mapbox Traffic Night
+      "mapbox://styles/mike854/clt0hm8mw01ok01p4blkr27jp"      // Mike854's Personalized Style
     };
 
     m_map->setStyleUrl(QString::fromStdString(styleUrls[map_style]));
