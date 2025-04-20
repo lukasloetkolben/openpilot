@@ -50,6 +50,7 @@ RANDOM_EVENTS_PATH = Path(__file__).parents[1] / "assets/random_events"
 THEME_SAVE_PATH = Path("/data/themes")
 
 ERROR_LOGS_PATH = Path("/data/error_logs")
+SCREEN_RECORDINGS_PATH = Path("/data/media/screen_recordings")
 
 HD_LOGS_PATH = Path("/data/media/0/realdata_HD")
 HD_PATH = Path("/cache/use_HD")
@@ -200,6 +201,7 @@ frogpilot_default_params: list[tuple[str, str | bytes, int]] = [
   ("ExperimentalModeConfirmed", "0", 0),
   ("ExperimentalModels", "", 1),
   ("Fahrenheit", "0", 3),
+  ("FavoriteDestinations", "", 0),
   ("ForceAutoTune", "0", 2),
   ("ForceAutoTuneOff", "0", 2),
   ("ForceFingerprint", "0", 2),
