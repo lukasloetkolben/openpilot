@@ -23,17 +23,10 @@ class CarInterface(CarInterfaceBase):
 
     # Check if we have messages on an auxiliary panda, and that 0x2bf (DAS_control) is present on the AP powertrain bus
     # If so, we assume that it is connected to the longitudinal harness.
-    flags = (Panda.FLAG_TESLA_RAVEN if candidate == CAR.TESLA_MODELS_RAVEN else 0)
-    if (CANBUS.autopilot_powertrain in fingerprint.keys()) and (0x2bf in fingerprint[CANBUS.autopilot_powertrain].keys()):
-      ret.openpilotLongitudinalControl = not disable_openpilot_long
-      flags |= Panda.FLAG_TESLA_LONG_CONTROL
-      ret.safetyConfigs = [
-        get_safety_config(car.CarParams.SafetyModel.tesla, flags),
-        get_safety_config(car.CarParams.SafetyModel.tesla, flags | Panda.FLAG_TESLA_POWERTRAIN),
-      ]
-    else:
-      ret.openpilotLongitudinalControl = False
-      ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.tesla, flags)]
+    ret.openpilotLongitudinalControl = not disable_openpilot_long
+    ret.safetyConfigs = [
+      get_safety_config(car.CarParams.SafetyModel.tesla, 0)
+    ]
 
     ret.steerLimitTimer = 1.0
     ret.steerActuatorDelay = 0.25

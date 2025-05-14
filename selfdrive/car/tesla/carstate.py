@@ -14,11 +14,9 @@ class CarState(CarStateBase):
     self.can_define = CANDefine(DBC[CP.carFingerprint]['chassis'])
 
     # Needed by carcontroller
-    self.msg_stw_actn_req = None
     self.hands_on_level = 0
     self.steer_warning = None
     self.acc_state = 0
-    self.das_control_counters = deque(maxlen=32)
 
   def update(self, cp, cp_cam, frogpilot_toggles):
     ret = car.CarState.new_message()
@@ -99,9 +97,7 @@ class CarState(CarStateBase):
     ret.stockAeb = (cp_cam.vl["DAS_control"]["DAS_aebEvent"] == 1)
 
     # Messages needed by carcontroller
-    self.msg_stw_actn_req = copy.copy(cp.vl["STW_ACTN_RQ"])
     self.acc_state = cp_cam.vl["DAS_control"]["DAS_accState"]
-    self.das_control_counters.extend(cp_cam.vl_all["DAS_control"]["DAS_controlCounter"])
 
     return ret, fp_ret
 
