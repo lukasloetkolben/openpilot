@@ -179,6 +179,7 @@ static int tesla_fwd_hook(int bus_num, int addr) {
 }
 
 static safety_config tesla_init(uint16_t param) {
+  UNUSED(param);
   tesla_stock_aeb = false;
 
   safety_config ret;
