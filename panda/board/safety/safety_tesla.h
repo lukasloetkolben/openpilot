@@ -93,7 +93,6 @@ static void tesla_rx_hook(const CANPacket_t *to_push) {
   }
 
   generic_rx_checks((addr == 0x488) && (bus == 0));
-  }
 
 }
 
