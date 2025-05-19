@@ -1,8 +1,7 @@
 import copy
-from collections import deque
 from cereal import car, custom
 from openpilot.common.conversions import Conversions as CV
-from openpilot.selfdrive.car.tesla.values import CAR, DBC, CANBUS, GEAR_MAP, DOORS, BUTTONS
+from openpilot.selfdrive.car.tesla.values import CAR, DBC, CANBUS, GEAR_MAP, DOORS
 from openpilot.selfdrive.car.interfaces import CarStateBase
 from opendbc.can.parser import CANParser
 from opendbc.can.can_define import CANDefine
@@ -10,13 +9,12 @@ from opendbc.can.can_define import CANDefine
 class CarState(CarStateBase):
   def __init__(self, CP):
     super().__init__(CP)
-    self.button_states = {button.event_type: False for button in BUTTONS}
     self.can_define = CANDefine(DBC[CP.carFingerprint]['chassis'])
 
     # Needed by carcontroller
     self.hands_on_level = 0
-    self.steer_warning = None
-    self.acc_state = 0
+    self.das_control = None
+    self.steering_disengage = False
 
   def update(self, cp, cp_cam, frogpilot_toggles):
     ret = car.CarState.new_message()
@@ -42,7 +40,7 @@ class CarState(CarStateBase):
     ret.steeringRateDeg = -cp.vl["STW_ANGLHP_STAT"]["StW_AnglHP_Spd"]
     ret.steeringTorque = -epas_status["EPAS_torsionBarTorque"]
 
-    ret.steeringPressed = (self.hands_on_level > 0)
+    ret.steeringPressed = self.hands_on_level > 0
 
     eac_status = self.can_define.dv["EPAS_sysStatus"]["EPAS_eacErrorCode"].get(int(epas_status["EPAS_eacErrorCode"]), None)
     ret.steerFaultPermanent = eac_status == "EAC_FAULT"
@@ -50,7 +48,7 @@ class CarState(CarStateBase):
 
     # FSD disengages using union of handsOnLevel (slow overrides) and high angle rate faults (fast overrides, high speed)
     eac_error_code = self.can_define.dv["EPAS_sysStatus"]["EPAS_eacErrorCode"].get(int(epas_status["EPAS_eacErrorCode"]), None)
-    ret.steeringDisengage = self.hands_on_level >= 3 or (eac_status == "EAC_INHIBITED" and
+    self.steering_disengage = self.hands_on_level >= 3 or (eac_status == "EAC_INHIBITED" and
                                                          eac_error_code == "EAC_ERROR_HIGH_ANGLE_RATE_SAFETY")
 
 
@@ -65,23 +63,11 @@ class CarState(CarStateBase):
       ret.cruiseState.speed = cp.vl["DI_state"]["DI_digitalSpeed"] * CV.KPH_TO_MS
     elif speed_units == "MPH":
       ret.cruiseState.speed = cp.vl["DI_state"]["DI_digitalSpeed"] * CV.MPH_TO_MS
-    ret.cruiseState.available = ((cruise_state == "STANDBY") or ret.cruiseState.enabled)
+    ret.cruiseState.available = cruise_state == "STANDBY" or ret.cruiseState.enabled
     ret.cruiseState.standstill = False # This needs to be false, since we can resume from stop without sending anything special
 
     # Gear
     ret.gearShifter = GEAR_MAP[self.can_define.dv["DI_torque2"]["DI_gear"].get(int(cp.vl["DI_torque2"]["DI_gear"]), "DI_GEAR_INVALID")]
-
-    # Buttons
-    buttonEvents = []
-    for button in BUTTONS:
-      state = (cp.vl[button.can_addr][button.can_msg] in button.values)
-      if self.button_states[button.event_type] != state:
-        event = car.CarState.ButtonEvent.new_message()
-        event.type = button.event_type
-        event.pressed = state
-        buttonEvents.append(event)
-      self.button_states[button.event_type] = state
-    ret.buttonEvents = buttonEvents
 
     # Doors
     ret.doorOpen = any((self.can_define.dv["GTW_carState"][door].get(int(cp.vl["GTW_carState"][door]), "OPEN") == "OPEN") for door in DOORS)
@@ -91,18 +77,13 @@ class CarState(CarStateBase):
     ret.rightBlinker = (cp.vl["GTW_carState"]["BC_indicatorRStatus"] == 1)
 
     # Seatbelt
-    if self.CP.carFingerprint == CAR.TESLA_MODELS_RAVEN:
-      ret.seatbeltUnlatched = (cp.vl["DriverSeat"]["buckleStatus"] != 1)
-    else:
-      ret.seatbeltUnlatched = (cp.vl["SDM1"]["SDM_bcklDrivStatus"] != 1)
-
-    # TODO: blindspot
+    ret.seatbeltUnlatched = (cp.vl["SDM1"]["SDM_bcklDrivStatus"] != 1)
 
     # AEB
-    ret.stockAeb = (cp_cam.vl["DAS_control"]["DAS_aebEvent"] == 1)
+    ret.stockAeb = cp_cam.vl["DAS_control"]["DAS_aebEvent"] == 1
 
     # Messages needed by carcontroller
-    self.acc_state = cp_cam.vl["DAS_control"]["DAS_accState"]
+    self.das_control = copy.copy(cp_cam.vl["DAS_control"])
 
     return ret, fp_ret
 
