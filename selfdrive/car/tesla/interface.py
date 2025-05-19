@@ -11,9 +11,6 @@ class CarInterface(CarInterfaceBase):
   def _get_params(ret, candidate, fingerprint, car_fw, disable_openpilot_long, experimental_long, docs):
     ret.carName = "tesla"
 
-    # There is no safe way to do steer blending with user torque,
-    # so the steering behaves like autopilot. This is not
-    # how openpilot should be, hence dashcamOnly
     ret.dashcamOnly = False
 
     ret.steerControlType = car.CarParams.SteerControlType.angle
@@ -21,8 +18,6 @@ class CarInterface(CarInterfaceBase):
     ret.longitudinalActuatorDelay = 0.5 # s
     ret.radarTimeStep = (1.0 / 8) # 8Hz
 
-    # Check if we have messages on an auxiliary panda, and that 0x2bf (DAS_control) is present on the AP powertrain bus
-    # If so, we assume that it is connected to the longitudinal harness.
     ret.openpilotLongitudinalControl = not disable_openpilot_long
     ret.safetyConfigs = [
       get_safety_config(car.CarParams.SafetyModel.tesla, 0)

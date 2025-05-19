@@ -17,13 +17,10 @@ class CarController(CarControllerBase):
 
   def update(self, CC, CS, now_nanos, frogpilot_toggles):
     actuators = CC.actuators
-    pcm_cancel_cmd = CC.cruiseControl.cancel
-
     can_sends = []
 
     # Temp disable steering on a hands_on_fault, and allow for user override
-    hands_on_fault = CS.steer_warning == "EAC_ERROR_HANDS_ON" and CS.hands_on_level >= 3
-    lkas_enabled = CC.latActive and not hands_on_fault
+    lkas_enabled = CC.latActive and CS.hands_on_level < 3
 
     if self.frame % 2 == 0:
       if lkas_enabled:
@@ -38,16 +35,12 @@ class CarController(CarControllerBase):
       self.apply_angle_last = apply_angle
       can_sends.append(self.tesla_can.create_steering_control(apply_angle, lkas_enabled, (self.frame // 2) % 16))
 
-    if hands_on_fault:
-      pcm_cancel_cmd = True
-
-    # Longitudinal control 25Hz
-    if self.CP.openpilotLongitudinalControl:
-      if self.frame % 4 == 0:
-        state = 13 if pcm_cancel_cmd else 4  # 4=ACC_ON, 13=ACC_CANCEL_GENERIC_SILENT
-        accel = float(np.clip(actuators.accel, CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX))
-        cntr = (self.frame // 4) % 8
-        can_sends.append(self.tesla_can.create_longitudinal_command(state, accel, cntr, CS.out.vEgo, CC.longActive))
+    # Longitudinal control
+    if self.frame % 4 == 0:
+      state = 13 if CC.cruiseControl.cancel else 4  # 4=ACC_ON, 13=ACC_CANCEL_GENERIC_SILENT
+      accel = float(np.clip(actuators.accel, CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX))
+      cntr = (self.frame // 4) % 8
+      can_sends.append(self.tesla_can.create_longitudinal_command(state, accel, cntr, CS.out.vEgo, CC.longActive))
 
     # TODO: HUD control
     new_actuators = actuators.as_builder()

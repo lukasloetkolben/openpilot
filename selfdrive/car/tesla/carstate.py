@@ -36,18 +36,23 @@ class CarState(CarStateBase):
     ret.brakePressed = bool(cp.vl["BrakeMessage"]["driverBrakeStatus"] != 1)
 
     # Steering wheel
-    epas_status = cp_cam.vl["EPAS3P_sysStatus"] if self.CP.carFingerprint == CAR.TESLA_MODELS_RAVEN else cp.vl["EPAS_sysStatus"]
-
+    epas_status = cp.vl["EPAS_sysStatus"]
     self.hands_on_level = epas_status["EPAS_handsOnLevel"]
-    self.steer_warning = self.can_define.dv["EPAS_sysStatus"]["EPAS_eacErrorCode"].get(int(epas_status["EPAS_eacErrorCode"]), None)
-    steer_status = self.can_define.dv["EPAS_sysStatus"]["EPAS_eacStatus"].get(int(epas_status["EPAS_eacStatus"]), None)
-
     ret.steeringAngleDeg = -epas_status["EPAS_internalSAS"]
-    ret.steeringRateDeg = -cp.vl["STW_ANGLHP_STAT"]["StW_AnglHP_Spd"] # This is from a different angle sensor, and at different rate
+    ret.steeringRateDeg = -cp.vl["STW_ANGLHP_STAT"]["StW_AnglHP_Spd"]
     ret.steeringTorque = -epas_status["EPAS_torsionBarTorque"]
+
     ret.steeringPressed = (self.hands_on_level > 0)
-    ret.steerFaultPermanent = steer_status == "EAC_FAULT"
-    ret.steerFaultTemporary = (self.steer_warning not in ("EAC_ERROR_IDLE", "EAC_ERROR_HANDS_ON"))
+
+    eac_status = self.can_define.dv["EPAS_sysStatus"]["EPAS_eacErrorCode"].get(int(epas_status["EPAS_eacErrorCode"]), None)
+    ret.steerFaultPermanent = eac_status == "EAC_FAULT"
+    ret.steerFaultTemporary = eac_status == "EAC_INHIBITED"
+
+    # FSD disengages using union of handsOnLevel (slow overrides) and high angle rate faults (fast overrides, high speed)
+    eac_error_code = self.can_define.dv["EPAS_sysStatus"]["EPAS_eacErrorCode"].get(int(epas_status["EPAS_eacErrorCode"]), None)
+    ret.steeringDisengage = self.hands_on_level >= 3 or (eac_status == "EAC_INHIBITED" and
+                                                         eac_error_code == "EAC_ERROR_HIGH_ANGLE_RATE_SAFETY")
+
 
     # Cruise state
     cruise_state = self.can_define.dv["DI_state"]["DI_cruiseState"].get(int(cp.vl["DI_state"]["DI_cruiseState"]), None)
