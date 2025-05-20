@@ -21,6 +21,7 @@ class CarController(CarControllerBase):
 
     # Temp disable steering on a hands_on_fault, and allow for user override
     lkas_enabled = CC.latActive and CS.hands_on_level < 3
+    cancel = CS.hands_on_level >= 3 or CC.cruiseControl.cancel
 
     if self.frame % 2 == 0:
       if lkas_enabled:
@@ -37,7 +38,7 @@ class CarController(CarControllerBase):
 
     # Longitudinal control
     if self.frame % 4 == 0:
-      state = CS.das_control["DAS_accState"]
+      state = 13 if cancel else CS.das_control["DAS_accState"]
       accel = float(np.clip(actuators.accel, CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX))
       cntr = (self.frame // 4) % 8
       can_sends.append(self.tesla_can.create_longitudinal_command(state, accel, cntr, CS.out.vEgo, CC.longActive))
