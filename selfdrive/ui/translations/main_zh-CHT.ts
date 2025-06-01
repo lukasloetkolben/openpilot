@@ -63,10 +63,6 @@
         <translation>行動網路</translation>
     </message>
     <message>
-        <source>Prevent large data uploads when on a metered connection</source>
-        <translation>防止使用行動網路上傳大量的數據</translation>
-    </message>
-    <message>
         <source>Hidden Network</source>
         <translation>隱藏的網路</translation>
     </message>
@@ -85,6 +81,30 @@
     <message>
         <source>for &quot;%1&quot;</source>
         <translation>給 &quot;%1&quot;</translation>
+    </message>
+    <message>
+        <source>Prevent large data uploads when on a metered cellular connection</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>default</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>metered</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>unmetered</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Wi-Fi Network Metered</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Prevent large data uploads when on a metered Wi-Fi connection</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -121,7 +141,7 @@
     </message>
     <message>
         <source>Longitudinal Maneuver Mode</source>
-        <translation>縱向機動模式</translation>
+        <translation>縱向操控測試模式</translation>
     </message>
     <message>
         <source>openpilot Longitudinal Control (Alpha)</source>
@@ -339,7 +359,7 @@ Firehose Mode allows you to maximize your training data uploads to improve openp
     </message>
     <message>
         <source>&lt;span stylesheet=&apos;font-size: 60px; font-weight: bold; color: #e74c3c;&apos;&gt;INACTIVE&lt;/span&gt;: connect to an unmetered network</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">&lt;span stylesheet=&apos;font-size: 60px; font-weight: bold; color: #e74c3c;&apos;&gt;閒置中&lt;/span&gt;：請連接到不按流量計費的網絡</translation>
     </message>
 </context>
 <context>
@@ -368,13 +388,6 @@ Firehose Mode allows you to maximize your training data uploads to improve openp
         <translation>
             <numerusform>需要至少 %n 個字元！</numerusform>
         </translation>
-    </message>
-</context>
-<context>
-    <name>Installer</name>
-    <message>
-        <source>Installing...</source>
-        <translation>安裝中…</translation>
     </message>
 </context>
 <context>
@@ -572,14 +585,6 @@ Firehose Mode allows you to maximize your training data uploads to improve openp
 </context>
 <context>
     <name>QObject</name>
-    <message>
-        <source>Reboot</source>
-        <translation>重新啟動</translation>
-    </message>
-    <message>
-        <source>Exit</source>
-        <translation>離開</translation>
-    </message>
     <message>
         <source>openpilot</source>
         <translation>openpilot</translation>
