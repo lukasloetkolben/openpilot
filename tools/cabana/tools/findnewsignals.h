@@ -56,7 +56,7 @@ private:
   void findNewSignalsInternal(const QSet<MessageIdentifier> &filter_ids = {}, bool use_filter = false);
 
   QTableWidget *table;
-  QLineEdit *start_time_edit, *end_time_edit;
+  QLineEdit *start_time_edit, *end_time_edit, *bus_filter_edit, *min_count_edit, *max_count_edit;
   QPushButton *search_btn;
   QPushButton *copy_btn;
   QPushButton *save_search_btn;

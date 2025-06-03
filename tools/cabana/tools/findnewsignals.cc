@@ -28,6 +28,32 @@ FindNewSignalsDlg::FindNewSignalsDlg(QWidget *parent) : QDialog(parent, Qt::Wind
 
   form_layout->addRow(tr("Start Time (seconds):"), start_time_edit);
   form_layout->addRow(tr("End Time (seconds):"), end_time_edit);
+  
+  // Add bus filter input
+  bus_filter_edit = new QLineEdit("", this);
+  bus_filter_edit->setPlaceholderText(tr("e.g., 1,4,5 (empty for all buses)"));
+  form_layout->addRow(tr("Filter Buses:"), bus_filter_edit);
+  
+  // Add minimum and maximum count filters
+  QHBoxLayout *count_filter_layout = new QHBoxLayout();
+  
+  min_count_edit = new QLineEdit("0", this);
+  min_count_edit->setPlaceholderText(tr("Min"));
+  min_count_edit->setValidator(new QIntValidator(0, 1000000, this));
+  min_count_edit->setMaximumWidth(100);
+  
+  max_count_edit = new QLineEdit("0", this);
+  max_count_edit->setPlaceholderText(tr("Max (0=no limit)"));
+  max_count_edit->setValidator(new QIntValidator(0, 1000000, this));
+  max_count_edit->setMaximumWidth(120);
+  
+  count_filter_layout->addWidget(new QLabel(tr("Unique Values:")));
+  count_filter_layout->addWidget(min_count_edit);
+  count_filter_layout->addWidget(new QLabel("-"));
+  count_filter_layout->addWidget(max_count_edit);
+  count_filter_layout->addStretch();
+  
+  form_layout->addRow(count_filter_layout);
 
   // Filter options
   QHBoxLayout *filter_layout = new QHBoxLayout();
@@ -142,12 +168,33 @@ void FindNewSignalsDlg::findNewSignalsInternal(const QSet<MessageIdentifier> &fi
 
   // Map to count new message values after the end time by message ID
   QHash<QPair<uint32_t, uint8_t>, int> new_messages_count;
+  // Map to count unique values per message
+  QHash<QPair<uint32_t, uint8_t>, QSet<QByteArray>> unique_values_per_message;
 
   // Process all events
   const auto &events = can->allEvents();
 
+  // Parse bus filter
+  QSet<uint8_t> bus_filter;
+  QString bus_filter_text = bus_filter_edit->text().trimmed();
+  if (!bus_filter_text.isEmpty()) {
+    QStringList bus_list = bus_filter_text.split(',');
+    for (const QString &bus_str : bus_list) {
+      bool ok;
+      int bus = bus_str.trimmed().toInt(&ok);
+      if (ok && bus >= 0 && bus <= 0xFF) {
+        bus_filter.insert(static_cast<uint8_t>(bus));
+      }
+    }
+  }
+
   // First phase: collect all message values in the specified time range
   for (const CanEvent *e : events) {
+    // Skip if bus filter is active and this message's bus is not in the filter
+    if (!bus_filter.isEmpty() && !bus_filter.contains(e->src)) {
+      continue;
+    }
+    
     // Skip if we're using a filter and this message ID is not in our filter set
     if (use_filter) {
       MessageIdentifier msg_id = {.address = e->address, .bus = e->src};
@@ -168,6 +215,11 @@ void FindNewSignalsDlg::findNewSignalsInternal(const QSet<MessageIdentifier> &fi
 
   // Second phase: check for new message values after the specified end time
   for (const CanEvent *e : events) {
+    // Skip if bus filter is active and this message's bus is not in the filter
+    if (!bus_filter.isEmpty() && !bus_filter.contains(e->src)) {
+      continue;
+    }
+    
     // Skip if we're using a filter and this message ID is not in our filter set
     if (use_filter) {
       MessageIdentifier msg_id = {.address = e->address, .bus = e->src};
@@ -183,29 +235,54 @@ void FindNewSignalsDlg::findNewSignalsInternal(const QSet<MessageIdentifier> &fi
         .data = QByteArray((const char*)e->dat, e->size)
       };
 
+      auto key = qMakePair(e->address, e->src);
       // If this message value wasn't seen in the initial time range
       if (!seen_messages.contains(mv)) {
-        auto key = qMakePair(e->address, e->src);
         new_messages_count[key]++;
-
         // Add to seen messages to avoid counting it multiple times
         seen_messages.insert(mv);
       }
+      // Track unique values for this message
+      unique_values_per_message[key].insert(QByteArray((const char*)e->dat, e->size));
     }
   }
 
+  // Get min/max unique values thresholds
+  int min_unique_values = min_count_edit->text().toInt();
+  int max_unique_values = max_count_edit->text().toInt();
+  
+  // Count messages that pass the filters
+  int filtered_count = 0;
+  for (auto it = new_messages_count.begin(); it != new_messages_count.end(); ++it) {
+    int unique_count = unique_values_per_message[it.key()].size();
+    if (unique_count >= min_unique_values && 
+        (max_unique_values == 0 || unique_count <= max_unique_values)) {
+      filtered_count++;
+    }
+  }
+  
   // Display results in the table
-  table->setRowCount(new_messages_count.size());
+  table->setRowCount(filtered_count);
   int row = 0;
 
   for (auto it = new_messages_count.begin(); it != new_messages_count.end(); ++it) {
     const auto &key = it.key();
-    int count = it.value();
-
+    int unique_value_count = unique_values_per_message[key].size();
+    
+    // Skip messages that don't meet the unique values thresholds
+    if (unique_value_count < min_unique_values || 
+        (max_unique_values > 0 && unique_value_count > max_unique_values)) {
+      continue;
+    }
+    
+    int new_messages = it.value();
+    
     table->setItem(row, 0, new QTableWidgetItem(QString::number(key.second)));
     table->setItem(row, 1, new QTableWidgetItem(QString("%1").arg(key.first, 1, 16)));
-    table->setItem(row, 2, new QTableWidgetItem(QString::number(count)));
-
+    table->setItem(row, 2, new QTableWidgetItem(QString("%1 (unique: %2)")
+      .arg(new_messages)
+      .arg(unique_value_count)));
+    
     row++;
   }
 
