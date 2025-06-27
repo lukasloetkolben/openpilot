@@ -227,7 +227,7 @@ class SpeedLimitController:
       params.put_float_nonblocking("PreviousSpeedLimit", self.target)
 
 
-  def update_limits(self, dashboard_speed_limit, gps_position, navigation_speed_limit, v_cruise, v_ego, sm):
+  def update_limits(self, dashboard_speed_limit, gps_position, navigation_speed_limit, v_cruise, v_cruise_cluster, v_ego, sm):
     self.update_map_speed_limit(gps_position, v_ego)
 
     limits = {
@@ -281,7 +281,7 @@ class SpeedLimitController:
 
         elif sm["controlsState"].enabled and self.frogpilot_toggles.slc_fallback_set_speed:
           desired_source = "None"
-          desired_target = v_cruise
+          desired_target = v_cruise_cluster
     else:
       self.mapbox_limit = 0
       self.segment_distance = 0
@@ -294,7 +294,7 @@ class SpeedLimitController:
       self.speed_limit_changed_timer = 0
       self.unconfirmed_speed_limit = 0
 
-  def update_override(self, v_cruise, v_ego, sm):
+  def update_override(self, v_cruise, v_cruise_cluster, v_ego, sm):
     self.override_slc = self.overridden_speed > self.target + self.offset > 0
     self.override_slc |= sm["carState"].gasPressed and v_ego > self.target + self.offset > 0
     self.override_slc &= sm["controlsState"].enabled
@@ -303,9 +303,9 @@ class SpeedLimitController:
       if self.frogpilot_toggles.speed_limit_controller_override_manual:
         if sm["carState"].gasPressed:
           self.overridden_speed = max(v_ego, self.overridden_speed)
-        self.overridden_speed = float(np.clip(self.overridden_speed, self.target + self.offset, v_cruise))
+        self.overridden_speed = float(np.clip(self.overridden_speed, self.target + self.offset, v_cruise_cluster))
       elif self.frogpilot_toggles.speed_limit_controller_override_set_speed:
-        self.overridden_speed = v_cruise
+        self.overridden_speed = v_cruise_cluster
 
       self.source = "None"
     else:

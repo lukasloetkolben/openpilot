@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import numpy as np
 
+from openpilot.common.conversions import Conversions as CV
 from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import COMFORT_BRAKE
 
@@ -38,6 +39,8 @@ class FrogPilotVCruise:
     elif self.override_force_stop_timer > 0:
       self.override_force_stop_timer -= DT_MDL
 
+    v_cruise_cluster = max(sm["controlsState"].vCruiseCluster * CV.KPH_TO_MS, v_cruise)
+
     # FrogsGoMoo's Curve Speed Controller
     if v_ego > CRUISING_SPEED and sm["controlsState"].enabled and self.frogpilot_planner.road_curvature_detected and frogpilot_toggles.curve_speed_controller:
       self.csc.update_target(v_ego)
@@ -67,13 +70,13 @@ class FrogPilotVCruise:
     self.slc.frogpilot_toggles = frogpilot_toggles
 
     if frogpilot_toggles.speed_limit_controller:
-      self.slc.update_limits(sm["frogpilotCarState"].dashboardSpeedLimit, gps_position, sm["frogpilotNavigation"].navigationSpeedLimit, v_cruise, v_ego, sm)
-      self.slc.update_override(v_cruise, v_ego, sm)
+      self.slc.update_limits(sm["frogpilotCarState"].dashboardSpeedLimit, gps_position, sm["frogpilotNavigation"].navigationSpeedLimit, v_cruise, v_cruise_cluster, v_ego, sm)
+      self.slc.update_override(v_cruise, v_cruise_cluster, v_ego, sm)
 
       self.slc_offset = self.slc.offset
       self.slc_target = self.slc.target
     elif frogpilot_toggles.show_speed_limits:
-      self.slc.update_limits(sm["frogpilotCarState"].dashboardSpeedLimit, gps_position, sm["frogpilotNavigation"].navigationSpeedLimit, v_cruise, v_ego, sm)
+      self.slc.update_limits(sm["frogpilotCarState"].dashboardSpeedLimit, gps_position, sm["frogpilotNavigation"].navigationSpeedLimit, v_cruise, v_cruise_cluster, v_ego, sm)
 
       self.slc_offset = 0
       self.slc_target = self.slc.target
