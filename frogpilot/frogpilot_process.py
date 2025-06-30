@@ -16,7 +16,6 @@ from openpilot.frogpilot.common.frogpilot_utilities import flash_panda, is_url_p
 from openpilot.frogpilot.common.frogpilot_variables import ERROR_LOGS_PATH, FrogPilotVariables, get_frogpilot_toggles, params, params_cache, params_memory
 from openpilot.frogpilot.controls.frogpilot_planner import FrogPilotPlanner
 from openpilot.frogpilot.controls.lib.frogpilot_tracking import FrogPilotTracking
-from openpilot.frogpilot.system.sentry_mode import SentryMode
 
 def assets_checks(model_manager, theme_manager):
   if params_memory.get_bool(MODEL_DOWNLOAD_ALL_PARAM):
@@ -71,7 +70,6 @@ def frogpilot_thread():
 
   frogpilot_variables = FrogPilotVariables()
   model_manager = ModelManager()
-  sentry_mode = SentryMode()
   theme_manager = ThemeManager()
 
   assets_checked = False
@@ -98,8 +96,6 @@ def frogpilot_thread():
     started = sm["deviceState"].started
 
     if not started and started_previously:
-      sentry_mode = SentryMode()
-
       run_update_checks = True
 
       frogpilot_variables.update(theme_manager.holiday_theme, started)
@@ -132,8 +128,6 @@ def frogpilot_thread():
       frogpilot_plan_send.frogpilotPlan.themeUpdated = theme_manager.theme_updated
       frogpilot_plan_send.frogpilotPlan.togglesUpdated = toggles_updated
       pm.send("frogpilotPlan", frogpilot_plan_send)
-    elif not started:
-      run_thread_with_lock("sentry_mode", sentry_mode.update)
 
     started_previously = started
 
