@@ -189,10 +189,18 @@ class SpeedLimitController:
   def handle_limit_change(self, desired_source, desired_target, sm):
     self.speed_limit_changed_timer += DT_MDL
 
-    speed_limit_accepted = (sm["frogpilotCarState"].accelPressed and not sm["carControl"].cruiseControl.override) or params_memory.get_bool("SpeedLimitAccepted")
+    accel_pressed = sm["frogpilotCarState"].accelPressed
+    control_enabled = sm["carControl"].enabled
+    speed_limit_accepted_param = params_memory.get_bool("SpeedLimitAccepted")
+
+    print(f"[DEBUG] accelPressed: {accel_pressed}, carControl.enabled: {control_enabled}, SpeedLimitAccepted param: {speed_limit_accepted_param}")
+    print(f"[DEBUG] desired_source: {desired_source}, desired_target: {desired_target}, current target: {self.target}")
+
+    speed_limit_accepted = (accel_pressed and control_enabled) or speed_limit_accepted_param
     speed_limit_denied = sm["frogpilotCarState"].decelPressed or (self.speed_limit_changed_timer >= 30)
 
     if speed_limit_accepted:
+      print("[DEBUG] Speed limit accepted")
       self.overridden_speed = 0
 
       self.source = desired_source
@@ -215,17 +223,18 @@ class SpeedLimitController:
       self.target = desired_target
 
     else:
+      print("[DEBUG] Speed limit change unconfirmed")
       self.source = "None"
       self.unconfirmed_speed_limit = desired_target
 
     if self.target != self.previous_target and self.target > 0 and not speed_limit_denied:
+      print("[DEBUG] Confirming and storing new target")
       self.denied_target = 0
 
       self.previous_source = self.source
       self.previous_target = self.target
 
       params.put_float_nonblocking("PreviousSpeedLimit", self.target)
-
 
   def update_limits(self, dashboard_speed_limit, gps_position, navigation_speed_limit, v_cruise, v_cruise_cluster, v_ego, sm):
     self.update_map_speed_limit(gps_position, v_ego)
