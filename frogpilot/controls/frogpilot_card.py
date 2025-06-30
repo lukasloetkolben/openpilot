@@ -103,6 +103,8 @@ class FrogPilotCard:
 
     if sm.updated["frogpilotPlan"] or any(be.type in (ButtonType.accelCruise, ButtonType.resumeCruise) for be in carState.buttonEvents):
       self.accel_pressed = any(be.type in (ButtonType.accelCruise, ButtonType.resumeCruise) for be in carState.buttonEvents)
+      print(f"[DEBUG] ButtonEvent: {[be.type for be in carState.buttonEvents]}")
+      print(f"[DEBUG] accel_pressed updated to: {self.accel_pressed}")
 
     if sm.updated["frogpilotPlan"] or any(be.type == ButtonType.decelCruise for be in carState.buttonEvents):
       self.decel_pressed = any(be.type == ButtonType.decelCruise for be in carState.buttonEvents)
@@ -139,5 +141,7 @@ class FrogPilotCard:
     frogpilotCarState.pauseLateral = self.pause_lateral
     frogpilotCarState.pauseLongitudinal = self.pause_longitudinal
     frogpilotCarState.trafficModeEnabled = self.traffic_mode_enabled
+
+    print(f"[DEBUG] frogpilotCarState.accelPressed final: {frogpilotCarState.accelPressed}")
 
     return frogpilotCarState

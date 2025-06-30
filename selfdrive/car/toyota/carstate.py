@@ -222,6 +222,8 @@ class CarState(CarStateBase):
     self.cruise_decreased = self.pcm_acc_status == 10
     self.cruise_increased_previously = self.cruise_increased
     self.cruise_increased = self.pcm_acc_status == 9
+    print(f"[DEBUG] cruise_increased_previously updated to: {self.cruise_increased_previously}")
+    print(f"[DEBUG] cruise_increased updated to: {self.cruise_increased}")
 
     fp_ret.dashboardSpeedLimit = calculate_speed_limit(cp_cam, frogpilot_toggles)
 
