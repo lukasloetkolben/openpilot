@@ -11,5 +11,7 @@ if [ -z "$AGNOS_VERSION" ]; then
 fi
 
 export STAGING_ROOT="/data/safe_staging"
+export SKIP_FW_QUERY="1"
+export FINGERPRINT="TESLA_AP1_MODELS"
 
 eval "$(/data/openpilot/frogpilot/system/environment_variables)"

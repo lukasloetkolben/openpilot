@@ -4,7 +4,7 @@ from openpilot.selfdrive.car import apply_std_steer_angle_limits
 from openpilot.selfdrive.car.interfaces import CarControllerBase
 from openpilot.selfdrive.car.tesla.teslacan import TeslaCAN
 from openpilot.selfdrive.car.tesla.values import DBC, CANBUS, CarControllerParams
-
+import numpy as np
 
 class CarController(CarControllerBase):
   def __init__(self, dbc_name, CP, FPCP, VM):
@@ -17,13 +17,11 @@ class CarController(CarControllerBase):
 
   def update(self, CC, CS, now_nanos, frogpilot_toggles):
     actuators = CC.actuators
-    pcm_cancel_cmd = CC.cruiseControl.cancel
-
     can_sends = []
 
     # Temp disable steering on a hands_on_fault, and allow for user override
-    hands_on_fault = CS.steer_warning == "EAC_ERROR_HANDS_ON" and CS.hands_on_level >= 3
-    lkas_enabled = CC.latActive and not hands_on_fault
+    lkas_enabled = CC.latActive and CS.hands_on_level < 3
+    cancel = CS.hands_on_level >= 3 or CC.cruiseControl.cancel
 
     if self.frame % 2 == 0:
       if lkas_enabled:
@@ -38,28 +36,14 @@ class CarController(CarControllerBase):
       self.apply_angle_last = apply_angle
       can_sends.append(self.tesla_can.create_steering_control(apply_angle, lkas_enabled, (self.frame // 2) % 16))
 
-    # Longitudinal control (in sync with stock message, about 40Hz)
-    if self.CP.openpilotLongitudinalControl:
-      target_accel = actuators.accel
-      target_speed = max(CS.out.vEgo + (target_accel * CarControllerParams.ACCEL_TO_SPEED_MULTIPLIER), 0)
-      max_accel = 0 if target_accel < 0 else target_accel
-      min_accel = 0 if target_accel > 0 else target_accel
-
-      while len(CS.das_control_counters) > 0:
-        can_sends.extend(self.tesla_can.create_longitudinal_commands(CS.acc_state, target_speed, min_accel, max_accel, CS.das_control_counters.popleft()))
-
-    # Cancel on user steering override, since there is no steering torque blending
-    if hands_on_fault:
-      pcm_cancel_cmd = True
-
-    if self.frame % 10 == 0 and pcm_cancel_cmd:
-      # Spam every possible counter value, otherwise it might not be accepted
-      for counter in range(16):
-        can_sends.append(self.tesla_can.create_action_request(CS.msg_stw_actn_req, pcm_cancel_cmd, CANBUS.chassis, counter))
-        can_sends.append(self.tesla_can.create_action_request(CS.msg_stw_actn_req, pcm_cancel_cmd, CANBUS.autopilot_chassis, counter))
+    # Longitudinal control
+    if self.frame % 4 == 0:
+      state = 13 if cancel else CS.das_control["DAS_accState"]
+      accel = float(np.clip(actuators.accel, CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX))
+      cntr = (self.frame // 4) % 8
+      can_sends.append(self.tesla_can.create_longitudinal_command(state, accel, cntr, CS.out.vEgo, CC.longActive))
 
     # TODO: HUD control
-
     new_actuators = actuators.as_builder()
     new_actuators.steeringAngleDeg = self.apply_angle_last
 
