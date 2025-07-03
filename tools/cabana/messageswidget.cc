@@ -1,5 +1,6 @@
 #include "tools/cabana/messageswidget.h"
 
+#include <QAction>
 #include <limits>
 #include <utility>
 
