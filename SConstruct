@@ -39,10 +39,6 @@ AddOption('--clazy',
           action='store_true',
           help='build with clazy')
 
-AddOption('--compile_db',
-          action='store_true',
-          help='build clang compilation database')
-
 AddOption('--ccflags',
           action='store',
           type='string',
@@ -214,8 +210,7 @@ if arch == "Darwin":
   darwin_rpath_link_flags = [f"-Wl,-rpath,{path}" for path in env["RPATH"]]
   env["LINKFLAGS"] += darwin_rpath_link_flags
 
-if GetOption('compile_db'):
-  env.CompilationDatabase('compile_commands.json')
+env.CompilationDatabase('compile_commands.json')
 
 # Setup cache dir
 cache_dir = '/data/scons_cache' if AGNOS else '/tmp/scons_cache'
@@ -342,13 +337,13 @@ SConscript(['rednose/SConscript'])
 
 # Build system services
 SConscript([
-  'system/proclogd/SConscript',
   'system/ubloxd/SConscript',
   'system/loggerd/SConscript',
 ])
 if arch != "Darwin":
   SConscript([
     'system/logcatd/SConscript',
+    'system/proclogd/SConscript',
   ])
 
 if arch == "larch64":
