@@ -14,8 +14,8 @@ STANDSTILL_THRESHOLD = 10 * 0.0311 * CV.KPH_TO_MS
 
 
 class CarState(CarStateBase):
-  def __init__(self, CP):
-    super().__init__(CP)
+  def __init__(self, CP, FPCP):
+    super().__init__(CP, FPCP)
     can_define = CANDefine(DBC[CP.carFingerprint]["pt"])
     self.shifter_values = can_define.dv["ECMPRDNL2"]["PRNDL2"]
     self.cluster_speed_hyst_gap = CV.KPH_TO_MS / 2.
@@ -170,8 +170,6 @@ class CarState(CarStateBase):
         ret.rightBlindspot = cam_cp.vl["BCMBlindSpotMonitor"]["RightBSM"] == 1
 
     # FrogPilot CarState functions
-    fp_ret.hasMenu = not (self.CP.flags & GMFlags.NO_CAMERA.value or self.CP.carFingerprint in CC_ONLY_CAR)
-
     self.lkas_previously_enabled = self.lkas_enabled
     if self.CP.carFingerprint in SDGM_CAR:
       self.lkas_enabled = cam_cp.vl["ASCMSteeringButton"]["LKAButton"]
@@ -185,7 +183,7 @@ class CarState(CarStateBase):
     return ret, fp_ret
 
   @staticmethod
-  def get_cam_can_parser(CP):
+  def get_cam_can_parser(CP, FPCP):
     messages = []
     if CP.networkLocation == NetworkLocation.fwdCamera and not CP.flags & GMFlags.NO_CAMERA.value:
       messages += [
@@ -212,7 +210,7 @@ class CarState(CarStateBase):
     return CANParser(DBC[CP.carFingerprint]["pt"], messages, CanBus.CAMERA)
 
   @staticmethod
-  def get_can_parser(CP):
+  def get_can_parser(CP, FPCP):
     messages = [
       ("PSCMStatus", 10),
       ("ESPStatus", 10),

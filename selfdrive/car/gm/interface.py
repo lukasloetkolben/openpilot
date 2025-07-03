@@ -12,6 +12,8 @@ from openpilot.selfdrive.car.gm.values import CAR, CruiseButtons, CarControllerP
 from openpilot.selfdrive.car.interfaces import CarInterfaceBase, TorqueFromLateralAccelCallbackType, FRICTION_THRESHOLD, LatControlInputs, NanoFFModel
 from openpilot.selfdrive.controls.lib.drive_helpers import get_friction
 
+from openpilot.frogpilot.common.frogpilot_variables import params
+
 ButtonType = car.CarState.ButtonEvent.Type
 FrogPilotButtonType = custom.FrogPilotCarState.ButtonEvent.Type
 EventName = car.CarEvent.EventName
@@ -38,7 +40,7 @@ NEURAL_PARAMS_PATH = os.path.join(BASEDIR, 'selfdrive/car/torque_data/neural_ff_
 
 class CarInterface(CarInterfaceBase):
   @staticmethod
-  def get_pid_accel_limits(CP, current_speed, cruise_speed, frogpilot_toggles):
+  def get_pid_accel_limits(CP, current_speed, cruise_speed):
     return CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX
 
   # Determined by iteratively plotting and minimizing error for f(angle, speed) = steer.
@@ -94,9 +96,7 @@ class CarInterface(CarInterfaceBase):
       return self.torque_from_lateral_accel_linear
 
   @staticmethod
-  def _get_params(ret, candidate, fingerprint, car_fw, disable_openpilot_long, experimental_long, docs, params):
-    use_new_api = params.get_bool("NewLongAPIGM")
-
+  def _get_params(ret, candidate, fingerprint, car_fw, experimental_long, docs, frogpilot_toggles):
     ret.carName = "gm"
     ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.gm)]
     ret.autoResumeSng = False
@@ -110,19 +110,7 @@ class CarInterface(CarInterfaceBase):
     else:
       ret.transmissionType = TransmissionType.automatic
 
-    if params.get_bool("ExperimentalGMTune"):
-      ret.stoppingDecelRate = 0.3
-      ret.vEgoStopping = 0.15
-      ret.vEgoStarting = 0.15
-
-    if use_new_api:
-      ret.longitudinalTuning.kiBP = [5., 35.]
-    else:
-      ret.longitudinalTuning.deadzoneBP = [0.]
-      ret.longitudinalTuning.deadzoneV = [0.15]
-
-      ret.longitudinalTuning.kpBP = [5., 35.]
-      ret.longitudinalTuning.kiBP = [0.]
+    ret.longitudinalTuning.kiBP = [5., 35.]
 
     if candidate in CAMERA_ACC_CAR:
       ret.experimentalLongitudinalAvailable = candidate not in CC_ONLY_CAR
@@ -134,26 +122,21 @@ class CarInterface(CarInterfaceBase):
       ret.minSteerSpeed = 10 * CV.KPH_TO_MS
 
       # Tuning for experimental long
-      if use_new_api:
-        ret.longitudinalTuning.kiV = [2.0, 1.5]
-        ret.vEgoStopping = 0.1
-        ret.vEgoStarting = 0.1
-      else:
-        ret.longitudinalTuning.kpV = [2.0, 1.5]
-        ret.longitudinalTuning.kiV = [0.72]
+      ret.longitudinalTuning.kiV = [2.0, 1.5]
+      ret.vEgoStopping = 0.1
+      ret.vEgoStarting = 0.1
 
       ret.stoppingDecelRate = 2.0  # reach brake quickly after enabling
       ret.vEgoStopping = 0.25
       ret.vEgoStarting = 0.25
 
-      if experimental_long:
+      if ret.experimentalLongitudinalAvailable and experimental_long:
         ret.pcmCruise = False
         ret.openpilotLongitudinalControl = True
         ret.safetyConfigs[0].safetyParam |= Panda.FLAG_GM_HW_CAM_LONG
 
     elif candidate in SDGM_CAR:
-      if use_new_api:
-        ret.longitudinalTuning.kiV = [0., 0.]  # TODO: tuning
+      ret.longitudinalTuning.kiV = [0., 0.]  # TODO: tuning
       ret.experimentalLongitudinalAvailable = False
       ret.networkLocation = NetworkLocation.fwdCamera
       ret.pcmCruise = True
@@ -163,7 +146,7 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[0].safetyParam |= Panda.FLAG_GM_HW_SDGM
 
     else:  # ASCM, OBD-II harness
-      ret.openpilotLongitudinalControl = not disable_openpilot_long
+      ret.openpilotLongitudinalControl = not frogpilot_toggles.disable_openpilot_long
       ret.networkLocation = NetworkLocation.gateway
       ret.radarUnavailable = RADAR_HEADER_MSG not in fingerprint[CanBus.OBSTACLE] and not docs
       ret.pcmCruise = False  # stock non-adaptive cruise control is kept off
@@ -172,11 +155,7 @@ class CarInterface(CarInterfaceBase):
       ret.minSteerSpeed = 7 * CV.MPH_TO_MS
 
       # Tuning
-      if use_new_api:
-        ret.longitudinalTuning.kiV = [2.4, 1.5]
-      else:
-        ret.longitudinalTuning.kpV = [2.4, 1.5]
-        ret.longitudinalTuning.kiV = [0.36]
+      ret.longitudinalTuning.kiV = [2.4, 1.5]
 
       if ret.enableGasInterceptor:
         # Need to set ASCM long limits when using pedal interceptor, instead of camera ACC long limits
@@ -288,7 +267,7 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[0].safetyParam |= Panda.FLAG_GM_HW_CAM
       ret.minEnableSpeed = -1
       ret.pcmCruise = False
-      ret.openpilotLongitudinalControl = not disable_openpilot_long
+      ret.openpilotLongitudinalControl = not frogpilot_toggles.disable_openpilot_long
       ret.stoppingControl = True
       ret.autoResumeSng = True
 
@@ -296,14 +275,8 @@ class CarInterface(CarInterfaceBase):
         ret.flags |= GMFlags.PEDAL_LONG.value
         ret.safetyConfigs[0].safetyParam |= Panda.FLAG_GM_PEDAL_LONG
         # Note: Low speed, stop and go not tested. Should be fairly smooth on highway
-        if use_new_api:
-          ret.longitudinalTuning.kiBP = [0.0, 5., 35.]
-          ret.longitudinalTuning.kiV = [0.0, 0.35, 0.5]
-        else:
-          ret.longitudinalTuning.kpBP = [5., 35.]
-          ret.longitudinalTuning.kpV = [0.35, 0.5]
-          ret.longitudinalTuning.kiBP = [0., 35.0]
-          ret.longitudinalTuning.kiV = [0.1, 0.1]
+        ret.longitudinalTuning.kiBP = [0.0, 5., 35.]
+        ret.longitudinalTuning.kiV = [0.0, 0.35, 0.5]
         ret.longitudinalTuning.kf = 0.15
         ret.stoppingDecelRate = 0.8
       else:  # Pedal used for SNG, ACC for longitudinal control otherwise
@@ -318,23 +291,19 @@ class CarInterface(CarInterfaceBase):
       ret.radarUnavailable = True
       ret.experimentalLongitudinalAvailable = False
       ret.minEnableSpeed = 24 * CV.MPH_TO_MS
-      ret.openpilotLongitudinalControl = not disable_openpilot_long
+      ret.openpilotLongitudinalControl = not frogpilot_toggles.disable_openpilot_long
       ret.pcmCruise = False
 
-      if use_new_api:
-        ret.longitudinalTuning.kiBP = [10.7, 10.8, 28.]
-        ret.longitudinalTuning.kiV = [0., 20., 20.]  # set lower end to 0 since we can't drive below that speed
-      else:
-        ret.longitudinalTuning.deadzoneBP = [0.]
-        ret.longitudinalTuning.deadzoneV = [0.56]  # == 2 km/h/s, 1.25 mph/s
-        ret.longitudinalActuatorDelay = 1.  # TODO: measure this
-
-        ret.longitudinalTuning.kpBP = [10.7, 10.8, 28.]  # 10.7 m/s == 24 mph
-        ret.longitudinalTuning.kpV = [0., 20., 20.]  # set lower end to 0 since we can't drive below that speed
-        ret.longitudinalTuning.kiBP = [0.]
-        ret.longitudinalTuning.kiV = [0.1]
-
       ret.stoppingDecelRate = 11.18  # == 25 mph/s (.04 rate)
+
+      ret.longitudinalTuning.deadzoneBP = [0.]
+      ret.longitudinalTuning.deadzoneV = [0.56]  # == 2 km/h/s, 1.25 mph/s
+      ret.longitudinalActuatorDelay = 1.  # TODO: measure this
+
+      ret.longitudinalTuning.kpBP = [10.7, 10.8, 28.]  # 10.7 m/s == 24 mph
+      ret.longitudinalTuning.kpV = [0., 20., 20.]  # set lower end to 0 since we can't drive below that speed
+      ret.longitudinalTuning.kiBP = [0.]
+      ret.longitudinalTuning.kiV = [0.1]
 
     if candidate in CC_ONLY_CAR:
       ret.safetyConfigs[0].safetyParam |= Panda.FLAG_GM_NO_ACC
@@ -378,21 +347,11 @@ class CarInterface(CarInterfaceBase):
     if below_min_enable_speed and not (ret.standstill and ret.brake >= 20 and
                                        (self.CP.networkLocation == NetworkLocation.fwdCamera and not self.CP.carFingerprint in SDGM_CAR)):
       events.add(EventName.belowEngageSpeed)
-    if ret.cruiseState.standstill and not (self.CP.autoResumeSng or self.disable_resumeRequired):
+    if ret.cruiseState.standstill and not self.CP.autoResumeSng:
       events.add(EventName.resumeRequired)
-      self.resumeRequired_shown = True
 
-    # Disable the "resumeRequired" event after it's been shown once to not annoy the driver
-    if self.resumeRequired_shown and not ret.cruiseState.standstill:
-      self.disable_resumeRequired = True
-
-    if ret.vEgo < self.CP.minSteerSpeed and not self.disable_belowSteerSpeed:
+    if ret.vEgo < self.CP.minSteerSpeed:
       events.add(EventName.belowSteerSpeed)
-      self.belowSteerSpeed_shown = True
-
-    # Disable the "belowSteerSpeed" event after it's been shown once to not annoy the driver
-    if self.belowSteerSpeed_shown and ret.vEgo >= self.CP.minSteerSpeed:
-      self.disable_belowSteerSpeed = True
 
     if (self.CP.flags & GMFlags.CC_LONG.value) and ret.vEgo < self.CP.minEnableSpeed and ret.cruiseState.enabled:
       events.add(EventName.speedTooLow)

@@ -12,7 +12,7 @@ EventName = car.CarEvent.EventName
 class CarInterface(CarInterfaceBase):
 
   @staticmethod
-  def _get_params(ret, candidate, fingerprint, car_fw, disable_openpilot_long, experimental_long, docs, params):
+  def _get_params(ret, candidate, fingerprint, car_fw, experimental_long, docs, frogpilot_toggles):
     ret.carName = "mazda"
     ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.mazda)]
     ret.radarUnavailable = True
@@ -26,6 +26,8 @@ class CarInterface(CarInterfaceBase):
       ret.minSteerSpeed = LKAS_LIMITS.DISABLE_SPEED * CV.KPH_TO_MS
 
     ret.centerToFront = ret.wheelbase * 0.41
+
+    ret.enableBsm = True
 
     return ret
 

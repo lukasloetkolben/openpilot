@@ -132,10 +132,6 @@ public:
     toggle.update();
   }
 
-  void refresh() {
-    toggle.togglePosition();
-  }
-
 signals:
   void toggleFlipped(bool state);
 
@@ -229,7 +225,6 @@ public:
 
     QObject::connect(button_group, QOverload<int>::of(&QButtonGroup::buttonClicked), [=](int id) {
       params.put(key, std::to_string(id));
-      emit buttonClicked();
     });
   }
 
@@ -251,9 +246,6 @@ public:
   void showEvent(QShowEvent *event) override {
     refresh();
   }
-
-signals:
-  void buttonClicked();
 
 private:
   std::string key;

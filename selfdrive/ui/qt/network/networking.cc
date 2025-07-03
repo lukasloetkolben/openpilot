@@ -6,6 +6,7 @@
 #include <QScrollBar>
 #include <QStyle>
 
+#include "selfdrive/ui/ui.h"
 #include "selfdrive/ui/qt/qt_window.h"
 #include "selfdrive/ui/qt/util.h"
 #include "selfdrive/ui/qt/widgets/controls.h"
@@ -135,12 +136,10 @@ AdvancedNetworking::AdvancedNetworking(QWidget* parent, WifiManager* wifi): QWid
     tetheringToggle->setCheckedButton(0);
   }
   QButtonGroup *buttonGroup = tetheringToggle->findChild<QButtonGroup *>();
-  if (buttonGroup) {
-    QObject::connect(buttonGroup, QOverload<int>::of(&QButtonGroup::buttonClicked), [this](int id) {
-      toggleTethering(id);
-    });
-  }
   list->addItem(tetheringToggle);
+  QObject::connect(buttonGroup, QOverload<int>::of(&QButtonGroup::buttonClicked), [this](int id) {
+    toggleTethering(id);
+  });
 
   // Change tethering password
   ButtonControl *editPasswordButton = new ButtonControl(tr("Tethering Password"), tr("EDIT"));
@@ -235,7 +234,6 @@ void AdvancedNetworking::refresh() {
 void AdvancedNetworking::toggleTethering(int id) {
   wifi->setTetheringEnabled(id == 1 || id == 3);
   tetheringToggle->setEnabled(false);
-  updateFrogPilotToggles();
 }
 
 // WifiUI functions
@@ -302,15 +300,6 @@ WifiUI::WifiUI(QWidget *parent, WifiManager* wifi) : QWidget(parent), wifi(wifi)
       color: #696969;
     }
   )");
-
-  // FrogPilot variables
-  QObject::connect(uiState(), &UIState::uiUpdate, this, &WifiUI::updateState);
-}
-
-void WifiUI::updateState(const UIState &s) {
-  if (!isVisible() || s.sm->frame % UI_FREQ != 0) return;
-
-  refresh();
 }
 
 void WifiUI::refresh() {

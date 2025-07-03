@@ -9,8 +9,8 @@ EventName = car.CarEvent.EventName
 
 
 class CarInterface(CarInterfaceBase):
-  def __init__(self, CP, CarController, CarState):
-    super().__init__(CP, CarController, CarState)
+  def __init__(self, CP, FPCP, CarController, CarState):
+    super().__init__(CP, FPCP, CarController, CarState)
 
     if CP.networkLocation == NetworkLocation.fwdCamera:
       self.ext_bus = CANBUS.pt
@@ -20,7 +20,7 @@ class CarInterface(CarInterfaceBase):
       self.cp_ext = self.cp_cam
 
   @staticmethod
-  def _get_params(ret, candidate: CAR, fingerprint, car_fw, disable_openpilot_long, experimental_long, docs, params):
+  def _get_params(ret, candidate: CAR, fingerprint, car_fw, experimental_long, docs, frogpilot_toggles):
     ret.carName = "volkswagen"
     ret.radarUnavailable = True
 

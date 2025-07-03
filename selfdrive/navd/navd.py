@@ -18,7 +18,7 @@ from openpilot.selfdrive.navd.helpers import (Coordinate, coordinate_from_param,
                                     parse_banner_instructions)
 from openpilot.common.swaglog import cloudlog
 
-from openpilot.selfdrive.frogpilot.frogpilot_variables import get_frogpilot_toggles, has_prime
+from openpilot.frogpilot.common.frogpilot_variables import get_frogpilot_toggles
 
 REROUTE_DISTANCE = 25
 MANEUVER_TRANSITION_THRESHOLD = 10
@@ -57,23 +57,20 @@ class RouteEngine:
     if "MAPBOX_TOKEN" in os.environ:
       self.mapbox_token = os.environ["MAPBOX_TOKEN"]
       self.mapbox_host = "https://api.mapbox.com"
-    elif not has_prime():
-      self.mapbox_token = self.params.get("MapboxSecretKey", encoding='utf8')
-      self.mapbox_host = "https://api.mapbox.com"
     else:
-      self.api = Api(self.params.get("DongleId", encoding='utf8'))
-      self.mapbox_host = os.getenv('MAPS_HOST', 'https://maps.comma.ai')
+      self.mapbox_token = Params("/cache/params").get("MapboxSecretKey", encoding='utf8')
+      self.mapbox_host = "https://api.mapbox.com"
 
     # FrogPilot variables
-    self.frogpilot_toggles = get_frogpilot_toggles(True)
-
-    self.stop_coord = []
-    self.stop_signal = []
+    self.frogpilot_toggles = get_frogpilot_toggles()
 
     self.approaching_intersection = False
     self.approaching_turn = False
 
     self.nav_speed_limit = 0
+
+    self.stop_coord = []
+    self.stop_signal = []
 
   def update(self):
     self.sm.update(0)
@@ -93,7 +90,7 @@ class RouteEngine:
     except Exception:
       cloudlog.exception("navd.failed_to_compute")
 
-    # Update FrogPilot parameters
+    # Update FrogPilot variables
     if self.sm['frogpilotPlan'].togglesUpdated:
       self.frogpilot_toggles = get_frogpilot_toggles()
 
@@ -271,11 +268,14 @@ class RouteEngine:
 
   def send_instruction(self):
     msg = messaging.new_message('navInstruction', valid=True)
+    fp_msg = messaging.new_message('frogpilotNavigation', valid=True)
 
     if self.step_idx is None:
       msg.valid = False
-      self.nav_speed_limit = 0
       self.pm.send('navInstruction', msg)
+
+      fp_msg.frogpilotNavigation.navigationSpeedLimit = 0
+      self.pm.send('frogpilotNavigation', fp_msg)
       return
 
     step = self.route[self.step_idx]
@@ -402,14 +402,11 @@ class RouteEngine:
       self.approaching_intersection = False
       self.approaching_turn = False
 
-    frogpilot_plan_send = messaging.new_message('frogpilotNavigation')
-    frogpilotNavigation = frogpilot_plan_send.frogpilotNavigation
+    fp_msg.frogpilotNavigation.approachingIntersection = self.approaching_intersection
+    fp_msg.frogpilotNavigation.approachingTurn = self.approaching_turn
+    fp_msg.frogpilotNavigation.navigationSpeedLimit = self.nav_speed_limit
 
-    frogpilotNavigation.approachingIntersection = self.approaching_intersection
-    frogpilotNavigation.approachingTurn = self.approaching_turn
-    frogpilotNavigation.navigationSpeedLimit = self.nav_speed_limit
-
-    self.pm.send('frogpilotNavigation', frogpilot_plan_send)
+    self.pm.send('frogpilotNavigation', fp_msg)
 
   def send_route(self):
     coords = []

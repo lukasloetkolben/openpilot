@@ -8,7 +8,7 @@ from openpilot.selfdrive.car.interfaces import CarInterfaceBase
 
 class CarInterface(CarInterfaceBase):
   @staticmethod
-  def _get_params(ret, candidate, fingerprint, car_fw, disable_openpilot_long, experimental_long, docs, params):
+  def _get_params(ret, candidate, fingerprint, car_fw, experimental_long, docs, frogpilot_toggles):
     ret.carName = "tesla"
 
     # Steer blending with user torque is done virtually, and is limited to 2Nm of torque
@@ -24,9 +24,9 @@ class CarInterface(CarInterfaceBase):
     if candidate in [CAR.TESLA_AP3_MODEL3, CAR.TESLA_AP3_MODELY]:
       flags = Panda.FLAG_TESLA_MODEL3_Y
 
-      if not disable_openpilot_long:
+      if not frogpilot_toggles.disable_openpilot_long:
         flags |= Panda.FLAG_TESLA_LONG_CONTROL
-      ret.openpilotLongitudinalControl = not disable_openpilot_long
+      ret.openpilotLongitudinalControl = not frogpilot_toggles.disable_openpilot_long
       ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.tesla, flags)]
 
     ret.steerLimitTimer = 1.0

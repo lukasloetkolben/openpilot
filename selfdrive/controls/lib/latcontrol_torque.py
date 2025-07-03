@@ -1,4 +1,5 @@
 from collections import deque
+
 import math
 import numpy as np
 
@@ -72,6 +73,8 @@ class LatControlTorque(LatControl):
     self.use_steering_angle = self.torque_params.useSteeringAngle
     self.steering_angle_deadzone_deg = self.torque_params.steeringAngleDeadzoneDeg
 
+    lateral_delay = CP.steerActuatorDelay
+
     # Twilsonco's Lateral Neural Network Feedforward
     self.use_nnff = CI.use_nnff
     self.use_nnff_lite = CI.use_nnff_lite
@@ -94,7 +97,7 @@ class LatControlTorque(LatControl):
 
       # precompute time differences between ModelConstants.T_IDXS
       self.t_diffs = np.diff(ModelConstants.T_IDXS)
-      self.desired_lat_jerk_time = CP.steerActuatorDelay + 0.3
+      self.desired_lat_jerk_time = lateral_delay
 
     if self.use_nnff:
       self.pitch = FirstOrderFilter(0.0, 0.5, 0.01)
@@ -105,10 +108,9 @@ class LatControlTorque(LatControl):
       self.nn_friction_override = CI.lat_torque_nn_model.friction_override
 
       # setup future time offsets
-      self.nn_time_offset = CP.steerActuatorDelay + 0.2
-      future_times = [0.3, 0.6, 1.0, 1.5] # seconds in the future
-      self.nn_future_times = [i + self.nn_time_offset for i in future_times]
-      self.nn_future_times_np = np.array(self.nn_future_times)
+      self.nn_time_offset = lateral_delay
+      self.future_times = [0.3, 0.6, 1.0, 1.5] # seconds in the future
+      self.nn_future_times = [i + self.nn_time_offset for i in self.future_times]
 
       # setup past time offsets
       self.past_times = [-0.3, -0.2, -0.1]
@@ -117,6 +119,14 @@ class LatControlTorque(LatControl):
       self.lateral_accel_desired_deque = deque(maxlen=history_check_frames[0])
       self.roll_deque = deque(maxlen=history_check_frames[0])
       self.error_deque = deque(maxlen=history_check_frames[0])
+      self.past_future_len = len(self.past_times) + len(self.nn_future_times)
+
+  def update_live_delay(self, lateral_delay):
+    self.desired_lat_jerk_time = lateral_delay
+
+    if self.use_nnff:
+      nn_time_offset = lateral_delay
+      self.nn_future_times = [i + nn_time_offset for i in self.future_times]
       self.past_future_len = len(self.past_times) + len(self.nn_future_times)
 
   def update_live_torque_params(self, latAccelFactor, latAccelOffset, friction):
@@ -168,7 +178,7 @@ class LatControlTorque(LatControl):
         predicted_lateral_jerk = get_predicted_lateral_jerk(model_data.acceleration.y, self.t_diffs)
         desired_lateral_jerk = (interp(self.desired_lat_jerk_time, ModelConstants.T_IDXS, model_data.acceleration.y) - desired_lateral_accel) / self.desired_lat_jerk_time
         lookahead_lateral_jerk = get_lookahead_value(predicted_lateral_jerk[LAT_PLAN_MIN_IDX:friction_upper_idx], desired_lateral_jerk)
-        if self.use_steering_angle or lookahead_lateral_jerk == 0.0:
+        if not self.use_steering_angle or lookahead_lateral_jerk == 0.0:
           lookahead_lateral_jerk = 0.0
           actual_lateral_jerk = 0.0
           self.lat_accel_friction_factor = 1.0
@@ -242,10 +252,11 @@ class LatControlTorque(LatControl):
                                             gravity_adjusted=True)
 
       freeze_integrator = steer_limited or CS.steeringPressed or CS.vEgo < 5
+      self.pid._k_p = frogpilot_toggles.steer_kp
       output_torque = self.pid.update(pid_log.error,
                                       feedforward=ff,
                                       speed=CS.vEgo,
-                                      freeze_integrator=freeze_integrator, frogpilot_toggles=frogpilot_toggles)
+                                      freeze_integrator=freeze_integrator)
 
       pid_log.active = True
       pid_log.p = self.pid.p

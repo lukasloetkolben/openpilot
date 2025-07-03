@@ -20,8 +20,6 @@ from openpilot.common.realtime import set_realtime_priority
 from openpilot.common.transformations.orientation import rot_from_euler, euler_from_rot
 from openpilot.common.swaglog import cloudlog
 
-from openpilot.selfdrive.frogpilot.frogpilot_variables import get_frogpilot_toggles
-
 MIN_SPEED_FILTER = 15 * CV.MPH_TO_MS
 MAX_VEL_ANGLE_STD = np.radians(0.25)
 MAX_YAW_RATE_FILTER = np.radians(2)  # per second
@@ -67,8 +65,7 @@ class Calibrator:
 
     # Read saved calibration
     self.params = Params()
-    self.calibration_key = get_frogpilot_toggles(True).part_model_param + "CalibrationParams"
-    calibration_params = self.params.get(self.calibration_key)
+    calibration_params = self.params.get("CalibrationParams")
     rpy_init = RPY_INIT
     wide_from_device_euler = WIDE_FROM_DEVICE_EULER_INIT
     height = HEIGHT_INIT
@@ -167,7 +164,7 @@ class Calibrator:
 
     write_this_cycle = (self.idx == 0) and (self.block_idx % (INPUTS_WANTED//5) == 5)
     if self.param_put and write_this_cycle:
-      self.params.put_nonblocking(self.calibration_key, self.get_msg(True).to_bytes())
+      self.params.put_nonblocking("CalibrationParams", self.get_msg(True).to_bytes())
 
   def handle_v_ego(self, v_ego: float) -> None:
     self.v_ego = v_ego

@@ -1,25 +1,25 @@
 """Install exception handler for process crash."""
 import os
+import psutil
 import sentry_sdk
-import subprocess
 import traceback
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from sentry_sdk.integrations.threading import ThreadingIntegration
 
 from openpilot.common.params import Params, ParamKeyType
-from openpilot.system.athena.registration import is_registered_device
-from openpilot.system.hardware import PC
+from openpilot.system.hardware import HARDWARE, PC
 from openpilot.common.swaglog import cloudlog
 from openpilot.system.version import get_build_metadata, get_version
 
-CRASHES_DIR = "/data/crashes/"
+from openpilot.frogpilot.common.frogpilot_variables import ERROR_LOGS_PATH, params
 
 class SentryProject(Enum):
   # python project
-  SELFDRIVE = "https://5ad1714d27324c74a30f9c538bff3b8d@o4505034923769856.ingest.us.sentry.io/4505034930651136"
+  SELFDRIVE = os.environ.get("SENTRY_DSN", "")
   # native project
-  SELFDRIVE_NATIVE = "https://5ad1714d27324c74a30f9c538bff3b8d@o4505034923769856.ingest.us.sentry.io/4505034930651136"
+  SELFDRIVE_NATIVE = os.environ.get("SENTRY_DSN", "")
 
 
 def report_tombstone(fn: str, message: str, contents: str) -> None:
@@ -36,14 +36,15 @@ def capture_exception(*args, **kwargs) -> None:
   exc_text = traceback.format_exc()
 
   phrases_to_check = [
-    "To overwrite it, set 'overwrite' to True.",
+    "already exists. To overwrite it, set 'overwrite' to True",
+    "setup_quectel failed after retry",
   ]
 
   if any(phrase in exc_text for phrase in phrases_to_check):
     return
 
   save_exception(exc_text)
-  cloudlog.error("crash", exc_info=kwargs.get('exc_info', 1))
+  cloudlog.error("crash", exc_info=kwargs.get("exc_info", 1))
 
   try:
     sentry_sdk.capture_exception(*args, **kwargs)
@@ -52,66 +53,59 @@ def capture_exception(*args, **kwargs) -> None:
     cloudlog.exception("sentry exception")
 
 
-def capture_fingerprint(candidate, params, blocked=False):
-  params_tracking = Params("/persist/tracking")
+def capture_memory_log():
+  virtual_memory = psutil.virtual_memory()
+  total_used = virtual_memory.used
+  total_memory = virtual_memory.total
 
-  param_types = {
-    "FrogPilot Controls": ParamKeyType.FROGPILOT_CONTROLS,
-    "FrogPilot Vehicles": ParamKeyType.FROGPILOT_VEHICLES,
-    "FrogPilot Visuals": ParamKeyType.FROGPILOT_VISUALS,
-    "FrogPilot Other": ParamKeyType.FROGPILOT_OTHER,
-    "FrogPilot Tracking": ParamKeyType.FROGPILOT_TRACKING,
-  }
+  process_list = []
+  for process in psutil.process_iter(['pid', 'username', 'memory_percent', 'cmdline', 'name']):
+    try:
+      cmdline = process.info.get('cmdline')
+      memory_percent = process.info.get('memory_percent', 0)
 
-  matched_params = {label: {} for label in param_types}
-  for key in params.all_keys():
-    for label, key_type in param_types.items():
-      if params.get_key_type(key) & key_type:
-        if key_type == ParamKeyType.FROGPILOT_TRACKING:
-          value = params_tracking.get_int(key)
-        else:
-          try:
-            value = params.get(key)
-            if isinstance(value, bytes):
-              value = value.decode('utf-8')
-            if isinstance(value, str) and value.replace('.', '', 1).isdigit():
-              value = float(value) if '.' in value else int(value)
-          except Exception:
-            value = "0"
-        matched_params[label][key.decode('utf-8')] = value
+      if cmdline and len(cmdline) > 0:
+        command = " ".join(cmdline)
+      else:
+        command = process.info.get('name', '')
 
-  for label, key_values in matched_params.items():
-    if label == "FrogPilot Tracking":
-      matched_params[label] = {k: f"{v:,}" for k, v in key_values.items()}
-    else:
-      matched_params[label] = {k: int(v) if isinstance(v, float) and v.is_integer() else v for k, v in sorted(key_values.items())}
+      process_list.append({
+        "pid": process.info['pid'],
+        "user": process.info.get('username', ''),
+        "memory_usage_percent": memory_percent,
+        "command": command
+      })
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+      continue
 
-  with sentry_sdk.configure_scope() as scope:
-    scope.fingerprint = [params.get("DongleId", encoding='utf-8')]
+  process_list.sort(key=lambda process: process['memory_usage_percent'], reverse=True)
+  top_processes = process_list[:5]
 
-    for label, key_values in matched_params.items():
-      scope.set_extra(label, "\n".join(f"{k}: {v}" for k, v in key_values.items()))
+  message = (
+    f"High memory detected: "
+    f"{(total_used / total_memory) * 100:.2f}% of total."
+  )
 
-  if blocked:
-    sentry_sdk.capture_message("Blocked user from using the development branch", level='error')
-  else:
-    sentry_sdk.capture_message(f"Fingerprinted {candidate}", level='info')
-    params.put_bool_nonblocking("FingerprintLogged", True)
-
-  sentry_sdk.flush()
+  with sentry_sdk.push_scope() as scope:
+    scope.set_extra("total_memory_usage_percent", (total_used / total_memory) * 100)
+    scope.set_extra("top_processes", top_processes)
+    scope.set_extra("updater_state", params.get("UpdaterState", encoding="utf-8"))
+    sentry_sdk.capture_message(message, level="fatal")
+    sentry_sdk.flush()
 
 
-def capture_tmux(process, started_time, params) -> None:
-  updated = params.get("Updated", encoding='utf-8')
+def capture_report(discord_user, report, frogpilot_toggles):
+  error_file_path = ERROR_LOGS_PATH / "error.txt"
+  error_content = "No error log found."
 
-  result = subprocess.run(['tmux', 'capture-pane', '-p', '-S', '-50'], stdout=subprocess.PIPE)
-  lines = result.stdout.decode('utf-8').splitlines()
+  if error_file_path.exists():
+    error_content = error_file_path.read_text()
 
-  if lines:
-    with sentry_sdk.configure_scope() as scope:
-      scope.set_extra("tmux_log", "\n".join(lines))
-      sentry_sdk.capture_message(f"{process} crashed - Last updated: {updated} - Started time: {started_time}", level='info')
-      sentry_sdk.flush()
+  with sentry_sdk.push_scope() as scope:
+    scope.set_context("Error Log", {"content": error_content})
+    scope.set_context("Toggle Values", frogpilot_toggles)
+    sentry_sdk.capture_message(f"{discord_user} submitted report: {report}", level="fatal")
+    sentry_sdk.flush()
 
 
 def set_tag(key: str, value: str) -> None:
@@ -119,23 +113,19 @@ def set_tag(key: str, value: str) -> None:
 
 
 def save_exception(exc_text: str) -> None:
-  if not os.path.exists(CRASHES_DIR):
-    os.makedirs(CRASHES_DIR)
-
   files = [
-    os.path.join(CRASHES_DIR, datetime.now().strftime('%Y-%m-%d--%H-%M-%S.log')),
-    os.path.join(CRASHES_DIR, 'error.txt')
+    ERROR_LOGS_PATH / datetime.now().strftime("%Y-%m-%d--%H-%M-%S.log"),
+    ERROR_LOGS_PATH / "error.txt"
   ]
 
-  for file in files:
-    with open(file, 'w') as f:
-      if file.endswith("error.txt"):
-        lines = exc_text.splitlines()[-10:]
-        f.write("\n".join(lines))
-      else:
-        f.write(exc_text)
+  for file_path in files:
+    if file_path.name == "error.txt":
+      lines = exc_text.splitlines()[-10:]
+      file_path.write_text("\n".join(lines))
+    else:
+      file_path.write_text(exc_text)
 
-  print('Logged current crash to {}'.format(files))
+  print(f"Logged current crash to {[str(file) for file in files]}")
 
 
 def init(project: SentryProject) -> bool:
@@ -144,22 +134,25 @@ def init(project: SentryProject) -> bool:
   if not FrogPilot or PC:
     return False
 
-  params = Params()
-  installed = params.get("InstallDate", encoding='utf-8')
-  updated = params.get("Updated", encoding='utf-8')
-
   short_branch = build_metadata.channel
 
-  if short_branch == "FrogPilot-Development":
+  if short_branch == "COMMA":
+    return
+  elif short_branch == "FrogPilot-Development":
     env = "Development"
   elif build_metadata.release_channel:
     env = "Release"
+  elif short_branch == "FrogPilot-Testing":
+    env = "Testing"
   elif build_metadata.tested_channel:
     env = "Staging"
   else:
     env = short_branch
 
-  dongle_id = params.get("DongleId", encoding='utf-8')
+  params = Params()
+  dongle_id = params.get("DongleId", encoding="utf-8")
+  installed = params.get("InstallDate", encoding="utf-8")
+  updated = params.get("Updated", encoding="utf-8")
 
   integrations = []
   if project == SentryProject.SELFDRIVE:

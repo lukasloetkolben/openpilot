@@ -6,7 +6,7 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.controls.lib.longitudinal_planner import LongitudinalPlanner
 import cereal.messaging as messaging
 
-from openpilot.selfdrive.frogpilot.frogpilot_variables import get_frogpilot_toggles
+from openpilot.frogpilot.common.frogpilot_variables import get_frogpilot_toggles
 
 def publish_ui_plan(sm, pm, longitudinal_planner):
   ui_send = messaging.new_message('uiPlan')
@@ -31,23 +31,22 @@ def plannerd_thread():
   longitudinal_planner = LongitudinalPlanner(CP)
   pm = messaging.PubMaster(['longitudinalPlan', 'uiPlan'])
   sm = messaging.SubMaster(['carControl', 'carState', 'controlsState', 'liveParameters', 'radarState', 'modelV2',
-                            'frogpilotCarControl', 'frogpilotCarState', 'frogpilotPlan'],
+                            'frogpilotCarState', 'frogpilotPlan'],
                            poll='modelV2', ignore_avg_freq=['radarState'])
 
   # FrogPilot variables
-  frogpilot_toggles = get_frogpilot_toggles(True)
+  frogpilot_toggles = get_frogpilot_toggles()
 
   classic_model = frogpilot_toggles.classic_model
-  radarless_model = frogpilot_toggles.radarless_model
 
   while True:
     sm.update()
     if sm.updated['modelV2']:
-      longitudinal_planner.update(classic_model, radarless_model, sm, frogpilot_toggles)
-      longitudinal_planner.publish(sm, pm)
+      longitudinal_planner.update(sm, frogpilot_toggles)
+      longitudinal_planner.publish(classic_model, sm, pm, frogpilot_toggles)
       publish_ui_plan(sm, pm, longitudinal_planner)
 
-    # Update FrogPilot parameters
+    # Update FrogPilot variables
     if sm['frogpilotPlan'].togglesUpdated:
       frogpilot_toggles = get_frogpilot_toggles()
 

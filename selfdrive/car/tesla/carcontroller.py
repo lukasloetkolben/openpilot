@@ -23,7 +23,7 @@ def torque_blended_angle(apply_angle, torsion_bar_torque):
   return apply_angle + clip(torque, -limit, limit) * strength
 
 class CarController(CarControllerBase):
-  def __init__(self, dbc_name, CP, VM):
+  def __init__(self, dbc_name, CP, FPCP, VM):
     self.CP = CP
     self.frame = 0
     self.apply_angle_last = 0

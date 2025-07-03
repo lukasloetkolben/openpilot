@@ -15,7 +15,7 @@
 #include "selfdrive/ui/qt/widgets/scrollview.h"
 #include "selfdrive/ui/qt/widgets/ssh_keys.h"
 
-#include "selfdrive/frogpilot/ui/qt/offroad/frogpilot_settings.h"
+#include "frogpilot/ui/qt/offroad/frogpilot_settings.h"
 
 TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
   // param, title, desc, icon
@@ -118,8 +118,8 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
   });
 
   // FrogPilot signals
-  connect(toggles["IsMetric"], &ToggleControl::toggleFlipped, [=]() {
-    updateMetric();
+  connect(toggles["IsMetric"], &ToggleControl::toggleFlipped, [=](bool metric) {
+    updateMetric(metric);
   });
 }
 
@@ -144,12 +144,15 @@ void TogglesPanel::showEvent(QShowEvent *event) {
 }
 
 void TogglesPanel::updateToggles() {
+  FrogPilotUIState &fs = *frogpilotUIState();
+  QJsonObject &frogpilot_toggles = fs.frogpilot_toggles;
+
   auto disengage_on_accelerator_toggle = toggles["DisengageOnAccelerator"];
-  disengage_on_accelerator_toggle->setVisible(!params.getBool("AlwaysOnLateral"));
+  disengage_on_accelerator_toggle->setVisible(!frogpilot_toggles.value("always_on_lateral").toBool());
   auto driver_camera_toggle = toggles["RecordFront"];
-  driver_camera_toggle->setVisible(!(params.getBool("DeviceManagement") && params.getBool("NoLogging") && params.getBool("NoUploads")));
+  driver_camera_toggle->setVisible(!(frogpilot_toggles.value("no_logging").toBool() && frogpilot_toggles.value("no_uploads").toBool()));
   auto nav_settings_left_toggle = toggles["NavSettingLeftSide"];
-  nav_settings_left_toggle->setVisible(!params.getBool("FullMap"));
+  nav_settings_left_toggle->setVisible(!frogpilot_toggles.value("full_map").toBool());
 
   auto experimental_mode_toggle = toggles["ExperimentalMode"];
   auto op_long_toggle = toggles["ExperimentalLongitudinalEnabled"];
@@ -178,13 +181,7 @@ void TogglesPanel::updateToggles() {
     op_long_toggle->setVisible(CP.getExperimentalLongitudinalAvailable());
     if (hasLongitudinalControl(CP)) {
       // normal description and toggle
-      bool conditional_experimental = params.getBool("ConditionalExperimental");
-      if (conditional_experimental) {
-        params.putBool("ExperimentalMode", true);
-        params.putBool("ExperimentalModeConfirmed", true);
-        experimental_mode_toggle->refresh();
-      }
-      experimental_mode_toggle->setEnabled(!conditional_experimental);
+      experimental_mode_toggle->setEnabled(true);
       experimental_mode_toggle->setDescription(e2e_description);
       long_personality_setting->setEnabled(true);
     } else {
@@ -216,7 +213,7 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   addItem(new LabelControl(tr("Serial"), params.get("HardwareSerial").c_str()));
 
   pair_device = new ButtonControl(tr("Pair Device"), tr("PAIR"),
-                                  tr("Pair your device with comma connect (connect.comma.ai) and claim your comma prime offer."));
+                                  useKonikServer() ? tr("Pair your device with Konik connect (stable.konik.ai).") : tr("Pair your device with comma connect (connect.comma.ai) and claim your comma prime offer."));
   connect(pair_device, &ButtonControl::clicked, [=]() {
     PairingPopup popup(this);
     popup.exec();
@@ -230,12 +227,14 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   connect(dcamBtn, &ButtonControl::clicked, [=]() { emit showDriverView(); });
   addItem(dcamBtn);
 
-  resetCalibBtn = new ButtonControl(tr("Reset Calibration"), tr("RESET"), "");
+  auto resetCalibBtn = new ButtonControl(tr("Reset Calibration"), tr("RESET"), "");
   connect(resetCalibBtn, &ButtonControl::showDescriptionEvent, this, &DevicePanel::updateCalibDescription);
   connect(resetCalibBtn, &ButtonControl::clicked, [&]() {
     if (ConfirmationDialog::confirm(tr("Are you sure you want to reset calibration?"), tr("Reset"), this)) {
       params.remove("CalibrationParams");
       params.remove("LiveTorqueParameters");
+      params.remove("LiveParameters");
+      params.remove("LiveDelay");
     }
   });
   addItem(resetCalibBtn);
@@ -361,22 +360,17 @@ void DevicePanel::poweroff() {
 void DevicePanel::showEvent(QShowEvent *event) {
   pair_device->setVisible(uiState()->primeType() == PrimeType::UNPAIRED);
   ListWidget::showEvent(event);
-
-  // Frogpilot variables
-  resetCalibBtn->setVisible(params.getInt("CustomizationLevel") != 2);
 }
 
 void SettingsWindow::hideEvent(QHideEvent *event) {
-  closeMapBoxInstructions();
-  closeMapSelection();
   closePanel();
-  closeParentToggle();
+  closeSubPanel();
 
-  mapboxInstructionsOpen = false;
-  mapSelectionOpen = false;
   panelOpen = false;
-  parentToggleOpen = false;
-  subParentToggleOpen = false;
+  subPanelOpen = false;
+  subSubPanelOpen = false;
+
+  updateFrogPilotToggles();
 }
 
 void SettingsWindow::showEvent(QShowEvent *event) {
@@ -415,20 +409,17 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
   sidebar_layout->addSpacing(10);
   sidebar_layout->addWidget(close_btn, 0, Qt::AlignRight);
   QObject::connect(close_btn, &QPushButton::clicked, [this]() {
-    if (mapboxInstructionsOpen) {
-      closeMapBoxInstructions();
-      mapboxInstructionsOpen = false;
-    } else if (mapSelectionOpen) {
-      closeMapSelection();
-      mapSelectionOpen = false;
-    } else if (subParentToggleOpen) {
-      closeSubParentToggle();
-      subParentToggleOpen = false;
-    } else if (parentToggleOpen) {
-      closeParentToggle();
-      parentToggleOpen = false;
+    if (subSubPanelOpen) {
+      closeSubSubPanel();
+
+      subSubPanelOpen = false;
+    } else if (subPanelOpen) {
+      closeSubPanel();
+
+      subPanelOpen = false;
     } else if (panelOpen) {
       closePanel();
+
       panelOpen = false;
     } else {
       closeSettings();
@@ -447,12 +438,9 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
   QObject::connect(toggles, &TogglesPanel::updateMetric, this, &SettingsWindow::updateMetric);
 
   FrogPilotSettingsWindow *frogpilotSettingsWindow = new FrogPilotSettingsWindow(this);
-  QObject::connect(frogpilotSettingsWindow, &FrogPilotSettingsWindow::closeMapBoxInstructions, [this]() {mapboxInstructionsOpen=false;});
-  QObject::connect(frogpilotSettingsWindow, &FrogPilotSettingsWindow::openMapBoxInstructions, [this]() {mapboxInstructionsOpen=true;});
-  QObject::connect(frogpilotSettingsWindow, &FrogPilotSettingsWindow::openMapSelection, [this]() {mapSelectionOpen=true;});
   QObject::connect(frogpilotSettingsWindow, &FrogPilotSettingsWindow::openPanel, [this]() {panelOpen=true;});
-  QObject::connect(frogpilotSettingsWindow, &FrogPilotSettingsWindow::openParentToggle, [this]() {parentToggleOpen=true;});
-  QObject::connect(frogpilotSettingsWindow, &FrogPilotSettingsWindow::openSubParentToggle, [this]() {subParentToggleOpen=true;});
+  QObject::connect(frogpilotSettingsWindow, &FrogPilotSettingsWindow::openSubPanel, [this]() {subPanelOpen=true;});
+  QObject::connect(frogpilotSettingsWindow, &FrogPilotSettingsWindow::openSubSubPanel, [this]() {subSubPanelOpen=true;});
 
   QList<QPair<QString, QWidget *>> panels = {
     {tr("Device"), device},
@@ -494,58 +482,59 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
 
     QObject::connect(btn, &QPushButton::clicked, [=, w = panel_frame]() {
       if (w->widget() == frogpilotSettingsWindow) {
-        bool customizationLevelConfirmed = params.getBool("CustomizationLevelConfirmed");
+        bool tuningLevelConfirmed = params.getBool("TuningLevelConfirmed");
 
-        if (!customizationLevelConfirmed) {
+        if (!tuningLevelConfirmed) {
           int frogpilotHours = paramsTracking.getInt("FrogPilotMinutes") / 60;
-          int openpilotHours = params.getInt("openpilotMinutes") / 60;
+          int openpilotHours = params.getInt("KonikMinutes") / 60 + params.getInt("openpilotMinutes") / 60;
 
           if (frogpilotHours < 1 && openpilotHours < 100) {
-            if (FrogPilotConfirmationDialog::toggleAlert(tr("Welcome to FrogPilot! Since you're new to FrogPilot, the 'Basic' toggle preset has been applied, but you can change this at any time via the 'Customization Level' button!"), tr("Sounds good!"), this, true)) {
-              params.putBoolNonBlocking("CustomizationLevelConfirmed", true);
-              params.putIntNonBlocking("CustomizationLevel", 0);
-            }
-          } else if (frogpilotHours < 50 && openpilotHours < 100) {
-            if (FrogPilotConfirmationDialog::toggleAlert(tr("Since you're fairly new to FrogPilot, the 'Basic' toggle preset has been applied, but you can change this at any time via the 'Customization Level' button!"), tr("Sounds good!"), this, true)) {
-              params.putBoolNonBlocking("CustomizationLevelConfirmed", true);
-              params.putIntNonBlocking("CustomizationLevel", 0);
-            }
-          } else if (frogpilotHours < 100) {
-            if (openpilotHours >= 100 && frogpilotHours < 100) {
-              if (FrogPilotConfirmationDialog::toggleAlert(tr("Since you're experienced with openpilot, the 'Standard' toggle preset has been applied, but you can change this at any time via the 'Customization Level' button!"), tr("Sounds good!"), this, true)) {
-                params.putBoolNonBlocking("CustomizationLevelConfirmed", true);
-                params.putIntNonBlocking("CustomizationLevel", 1);
+            if (openpilotHours < 10) {
+              if (ConfirmationDialog::alert(tr("Welcome to FrogPilot! Since you're new to openpilot, the \"Minimal\" toggle preset has been applied, but you can change this at any time via the \"Tuning Level\" button!"), this, true)) {
+                params.putBool("TuningLevelConfirmed", true);
+                params.putInt("TuningLevel", 0);
               }
             } else {
-              if (FrogPilotConfirmationDialog::toggleAlert(tr("Since you're experienced with FrogPilot, the 'Standard' toggle preset has been applied, but you can change this at any time via the 'Customization Level' button!"), tr("Sounds good!"), this, true)) {
-                params.putBoolNonBlocking("CustomizationLevelConfirmed", true);
-                params.putIntNonBlocking("CustomizationLevel", 1);
+              if (ConfirmationDialog::alert(tr("Welcome to FrogPilot! Since you're new to FrogPilot, the \"Minimal\" toggle preset has been applied, but you can change this at any time via the \"Tuning Level\" button!"), this, true)) {
+                params.putBool("TuningLevelConfirmed", true);
+                params.putInt("TuningLevel", 0);
+              }
+            }
+          } else if (frogpilotHours < 50 && openpilotHours < 100) {
+            if (ConfirmationDialog::alert(tr("Since you're fairly new to FrogPilot, the \"Minimal\" toggle preset has been applied, but you can change this at any time via the \"Tuning Level\" button!"), this, true)) {
+              params.putBool("TuningLevelConfirmed", true);
+              params.putInt("TuningLevel", 0);
+            }
+          } else if (frogpilotHours < 100) {
+            if (openpilotHours >= 100) {
+              if (ConfirmationDialog::alert(tr("Since you're experienced with openpilot, the \"Standard\" toggle preset has been applied, but you can change this at any time via the \"Tuning Level\" button!"), this, true)) {
+                params.putBool("TuningLevelConfirmed", true);
+                params.putInt("TuningLevel", 1);
+              }
+            } else {
+              if (ConfirmationDialog::alert(tr("Since you're experienced with FrogPilot, the \"Standard\" toggle preset has been applied, but you can change this at any time via the \"Tuning Level\" button!"), this, true)) {
+                params.putBool("TuningLevelConfirmed", true);
+                params.putInt("TuningLevel", 1);
               }
             }
           } else if (frogpilotHours >= 100) {
-            if (FrogPilotConfirmationDialog::toggleAlert(tr("Since you're very experienced with FrogPilot, the 'Advanced' toggle preset has been applied, but you can change this at any time via the 'Customization Level' button!"), tr("Sounds good!"), this, true)) {
-              params.putBoolNonBlocking("CustomizationLevelConfirmed", true);
-              params.putIntNonBlocking("CustomizationLevel", 2);
+            if (ConfirmationDialog::alert(tr("Since you're very experienced with FrogPilot, the \"Advanced\" toggle preset has been applied, but you can change this at any time via the \"Tuning Level\" button!"), this, true)) {
+              params.putBool("TuningLevelConfirmed", true);
+              params.putInt("TuningLevel", 2);
             }
           }
         }
       }
 
-      if (mapboxInstructionsOpen) {
-        closeMapBoxInstructions();
-        mapboxInstructionsOpen = false;
-      }
-      if (mapSelectionOpen) {
-        closeMapSelection();
-        mapSelectionOpen = false;
-      }
       if (panelOpen) {
         closePanel();
+
         panelOpen = false;
       }
-      if (parentToggleOpen) {
-        closeParentToggle();
-        parentToggleOpen = false;
+      if (subPanelOpen) {
+        closeSubPanel();
+
+        subPanelOpen = false;
       }
       btn->setChecked(true);
       panel_widget->setCurrentWidget(w);

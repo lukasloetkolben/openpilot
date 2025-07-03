@@ -10,12 +10,10 @@ using Car = import "car.capnp";
 # cereal, so use these if you want custom events in your fork.
 
 # you can rename the struct, but don't change the identifier
-struct FrogPilotCarControl @0x81c2f05a394cf4af {
-  alwaysOnLateralActive @0 :Bool;
-  fcwEventTriggered @1 :Bool;
-  noEntryEventTriggered @2 :Bool;
-  resumePressed @3 :Bool;
-  steerSaturatedEventTriggered @4 :Bool;
+struct FrogPilotCarParams @0x81c2f05a394cf4af {
+  fpFlags @0 :UInt32;
+  isHDA2 @1 :Bool;
+  openpilotLongitudinalControlDisabled @2 :Bool;
 }
 
 struct FrogPilotCarState @0xaedffd8f31e7b55d {
@@ -25,14 +23,21 @@ struct FrogPilotCarState @0xaedffd8f31e7b55d {
     }
   }
 
-  alwaysOnLateralDisabled @0 :Bool;
-  brakeLights @1 :Bool;
-  dashboardSpeedLimit @2 :Float32;
-  distanceLongPressed @3 :Bool;
-  ecoGear @4 :Bool;
-  hasMenu @5 :Bool;
-  sportGear @6 :Bool;
-  trafficModeActive @7 :Bool;
+  accelPressed @0 :Bool;
+  alwaysOnLateralAllowed @1 :Bool;
+  alwaysOnLateralEnabled @2 :Bool;
+  brakeLights @3 :Bool;
+  dashboardSpeedLimit @4 :Float32;
+  decelPressed @5 :Bool;
+  distancePressed @6 :Bool;
+  distanceLongPressed @7 :Bool;
+  distanceVeryLongPressed @8 :Bool;
+  ecoGear @9 :Bool;
+  forceCoast @10 :Bool;
+  pauseLateral @11 :Bool;
+  pauseLongitudinal @12 :Bool;
+  sportGear @13 :Bool;
+  trafficModeEnabled @14 :Bool;
 }
 
 struct FrogPilotDeviceState @0xf35cc4560bbf6ec2 {
@@ -49,10 +54,10 @@ struct FrogPilotNavigation @0xda96579883444c35 {
 struct FrogPilotPlan @0x80ae746ee2596b11 {
   accelerationJerk @0 :Float32;
   accelerationJerkStock @1 :Float32;
-  adjustedCruise @2 :Float32;
-  dangerJerk @3 :Float32;
-  desiredFollowDistance @4 :Float32;
-  experimentalMode @5 :Bool;
+  dangerJerk @2 :Float32;
+  desiredFollowDistance @3 :Int64;
+  experimentalMode @4 :Bool;
+  trackingLead @5 :Bool;
   forcingStop @6 :Bool;
   forcingStopLength @7 :Float32;
   frogpilotEvents @8 :List(Car.CarEvent);
@@ -61,22 +66,26 @@ struct FrogPilotPlan @0x80ae746ee2596b11 {
   laneWidthRight @11 :Float32;
   maxAcceleration @12 :Float32;
   minAcceleration @13 :Float32;
-  redLight @14 :Bool;
-  safeObstacleDistance @15 :Int64;
-  safeObstacleDistanceStock @16 :Int64;
-  slcOverridden @17 :Bool;
-  slcOverriddenSpeed @18 :Float32;
-  slcSpeedLimit @19 :Float32;
-  slcSpeedLimitOffset @20 :Float32;
-  speedJerk @21 :Float32;
-  speedJerkStock @22 :Float32;
-  speedLimitChanged @23 :Bool;
-  stoppedEquivalenceFactor @24 :Int64;
-  tFollow @25 :Float32;
-  togglesUpdated @26 :Bool;
-  unconfirmedSlcSpeedLimit @27 :Float32;
-  vCruise @28 :Float32;
-  vtscControllingCurve @29 :Bool;
+  mtscSpeed @14 :Float32;
+  redLight @15 :Bool;
+  roadCurvature @16 :Float32;
+  slcMapSpeedLimit @17 :Float32;
+  slcMapboxSpeedLimit @18 :Float32;
+  slcNextSpeedLimit @19 :Float32;
+  slcOverriddenSpeed @20 :Float32;
+  slcSpeedLimit @21 :Float32;
+  slcSpeedLimitOffset @22 :Float32;
+  slcSpeedLimitSource @23 :Text;
+  speedJerk @24 :Float32;
+  speedJerkStock @25 :Float32;
+  speedLimitChanged @26 :Bool;
+  tFollow @27 :Float32;
+  themeUpdated @28 :Bool;
+  togglesUpdated @29 :Bool;
+  unconfirmedSlcSpeedLimit @30 :Float32;
+  vCruise @31 :Float32;
+  vtscControllingCurve @32 :Bool;
+  vtscSpeed @33 :Float32;
 }
 
 struct CustomReserved5 @0xa5cd762cd951a455 {

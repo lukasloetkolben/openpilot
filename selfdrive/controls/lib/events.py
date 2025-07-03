@@ -10,9 +10,10 @@ from cereal import log, car
 import cereal.messaging as messaging
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.git import get_short_branch
-from openpilot.common.params import Params
 from openpilot.common.realtime import DT_CTRL
 from openpilot.selfdrive.locationd.calibrationd import MIN_SPEED_FILTER
+
+from openpilot.frogpilot.common.frogpilot_variables import params
 
 AlertSize = log.ControlsState.AlertSize
 AlertStatus = log.ControlsState.AlertStatus
@@ -315,9 +316,12 @@ def modeld_lagging_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubM
 
 
 def wrong_car_mode_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, frogpilot_toggles: SimpleNamespace) -> Alert:
-  text = "Enable Adaptive Cruise to Engage"
-  if CP.carName == "honda":
+  if frogpilot_toggles.has_cc_long:
+    text = "Enable Cruise Control to Engage"
+  elif CP.carName == "honda":
     text = "Enable Main Switch to Engage"
+  else:
+    text = "Enable Adaptive Cruise to Engage"
   return NoEntryAlert(text)
 
 
@@ -346,27 +350,26 @@ def forcing_stop_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMas
 
 def holiday_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, frogpilot_toggles: SimpleNamespace) -> Alert:
   holiday_messages = {
-    "new_years": ("Happy New Year! 🎉", "newYearsDayAlert"),
-    "valentines": ("Happy Valentine's Day! ❤️", "valentinesDayAlert"),
-    "st_patricks": ("Happy St. Patrick's Day! 🍀", "stPatricksDayAlert"),
-    "world_frog_day": ("Happy World Frog Day! 🐸", "worldFrogDayAlert"),
-    "april_fools": ("Happy April Fool's Day! 🤡", "aprilFoolsAlert"),
-    "easter_week": ("Happy Easter! 🐰", "easterAlert"),
-    "cinco_de_mayo": ("¡Feliz Cinco de Mayo! 🌮", "cincoDeMayoAlert"),
-    "fourth_of_july": ("Happy Fourth of July! 🎆", "fourthOfJulyAlert"),
-    "halloween_week": ("Happy Halloween! 🎃", "halloweenAlert"),
-    "thanksgiving_week": ("Happy Thanksgiving! 🦃", "thanksgivingAlert"),
-    "christmas_week": ("Merry Christmas! 🎄", "christmasAlert")
+    "new_years": "Happy New Year! 🎉",
+    "valentines": "Happy Valentine's Day! ❤️",
+    "st_patricks": "Happy St. Patrick's Day! 🍀",
+    "world_frog_day": "Happy World Frog Day! 🐸",
+    "april_fools": "Happy April Fool's Day! 🤡",
+    "easter_week": "Happy Easter! 🐰",
+    "may_the_fourth": "May the 4th be with you! 🚀",
+    "cinco_de_mayo": "¡Feliz Cinco de Mayo! 🌮",
+    "stitch_day": "Happy Stitch Day! 💙",
+    "fourth_of_july": "Happy Fourth of July! 🎆",
+    "halloween_week": "Happy Halloween! 🎃",
+    "thanksgiving_week": "Happy Thanksgiving! 🦃",
+    "christmas_week": "Merry Christmas! 🎄",
   }
 
-  holiday_name = frogpilot_toggles.current_holiday_theme
-  message, alert_type = holiday_messages.get(holiday_name, ("", ""))
-
   return Alert(
-    message,
+    holiday_messages.get(frogpilot_toggles.current_holiday_theme),
     "",
     AlertStatus.normal, AlertSize.small,
-    Priority.LOWEST, VisualAlert.none, AudibleAlert.engage, 5.)
+    Priority.LOWEST, VisualAlert.none, AudibleAlert.startup, 5.)
 
 
 def no_lane_available_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, frogpilot_toggles: SimpleNamespace) -> Alert:
@@ -381,8 +384,8 @@ def no_lane_available_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.S
 
 
 def torque_nn_load_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, frogpilot_toggles: SimpleNamespace) -> Alert:
-  model_name = Params().get("NNFFModelName", encoding='utf-8')
-  if model_name == "":
+  model_name = params.get("NNFFModelName", encoding='utf-8')
+  if model_name is None:
     return Alert(
       "NNFF Torque Controller not available",
       "Donate logs to Twilsonco to get your car supported!",
@@ -436,6 +439,12 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
     ET.PERMANENT: StartupAlert("Car Unrecognized",
                                "Check comma power connections",
                                alert_status=AlertStatus.userPrompt),
+  },
+
+  EventName.startupNoSecOcKey: {
+    ET.PERMANENT: NormalPermanentAlert("Dashcam Mode",
+                                       "Security Key Not Available",
+                                       priority=Priority.HIGH),
   },
 
   EventName.dashcamMode: {
@@ -1040,8 +1049,8 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.goatSteerSaturated: {
     ET.WARNING: Alert(
-      "Turn exceeds steering limit",
       "JESUS TAKE THE WHEEL!!",
+      "Turn Exceeds Steering Limit",
       AlertStatus.userPrompt, AlertSize.mid,
       Priority.LOW, VisualAlert.steerRequired, AudibleAlert.goat, 2.),
   },
@@ -1060,7 +1069,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.laneChangeBlockedLoud: {
     ET.WARNING: Alert(
-      "Car detected in blindspot",
+      "Car Detected in Blindspot",
       "",
       AlertStatus.userPrompt, AlertSize.small,
       Priority.LOW, VisualAlert.none, AudibleAlert.warningSoft, .1),
@@ -1079,11 +1088,17 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   EventName.openpilotCrashed: {
-    ET.PERMANENT: Alert(
+    ET.IMMEDIATE_DISABLE: Alert(
       "openpilot crashed",
       "Please post the 'Error Log' in the FrogPilot Discord!",
       AlertStatus.normal, AlertSize.mid,
-      Priority.HIGHEST, VisualAlert.none, AudibleAlert.prompt, 10.),
+      Priority.HIGHEST, VisualAlert.none, AudibleAlert.prompt, .1),
+
+    ET.NO_ENTRY: Alert(
+      "openpilot crashed",
+      "Please post the 'Error Log' in the FrogPilot Discord!",
+      AlertStatus.normal, AlertSize.mid,
+      Priority.HIGHEST, VisualAlert.none, AudibleAlert.prompt, .1),
   },
 
   EventName.pedalInterceptorNoBrake: {
@@ -1104,8 +1119,8 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.thisIsFineSteerSaturated: {
     ET.WARNING: Alert(
-      "This is fine",
-      "☕",
+      "This is fine ☕",
+      "Turn Exceeds Steering Limit",
       AlertStatus.userPrompt, AlertSize.mid,
       Priority.LOW, VisualAlert.steerRequired, AudibleAlert.thisIsFine, 2.),
   },
@@ -1181,8 +1196,8 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventName.firefoxSteerSaturated: {
     ET.WARNING: Alert(
-      "Turn Exceeds Steering Limit",
       "IE Has Stopped Responding...",
+      "Turn Exceeds Steering Limit",
       AlertStatus.userPrompt, AlertSize.mid,
       Priority.LOW, VisualAlert.steerRequired, AudibleAlert.firefox, 4.),
   },
@@ -1196,11 +1211,25 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   EventName.openpilotCrashedRandomEvent: {
-    ET.PERMANENT: Alert(
+    ET.IMMEDIATE_DISABLE: Alert(
       "openpilot crashed 💩",
       "Please post the 'Error Log' in the FrogPilot Discord!",
       AlertStatus.normal, AlertSize.mid,
       Priority.HIGHEST, VisualAlert.none, AudibleAlert.fart, 10.),
+
+    ET.NO_ENTRY: Alert(
+      "openpilot crashed 💩",
+      "Please post the 'Error Log' in the FrogPilot Discord!",
+      AlertStatus.normal, AlertSize.mid,
+      Priority.HIGHEST, VisualAlert.none, AudibleAlert.fart, 10.),
+  },
+
+  EventName.toBeContinued: {
+    ET.PERMANENT: Alert(
+      "To be continued...",
+      "⬅️",
+      AlertStatus.frogpilot, AlertSize.mid,
+      Priority.MID, VisualAlert.none, AudibleAlert.continued, 7.),
   },
 
   EventName.vCruise69: {

@@ -29,7 +29,7 @@ BRAKE_PITCH_FACTOR_BP = [5., 10.]  # [m/s] smoothly revert to planned accel at l
 BRAKE_PITCH_FACTOR_V = [0., 1.]  # [unitless in [0,1]]; don't touch
 
 class CarController(CarControllerBase):
-  def __init__(self, dbc_name, CP, VM):
+  def __init__(self, dbc_name, CP, FPCP, VM):
     self.CP = CP
     self.start_time = 0.
     self.apply_steer_last = 0
@@ -143,13 +143,13 @@ class CarController(CarControllerBase):
           # Normal operation
           if self.CP.carFingerprint in EV_CAR:
             self.params.update_ev_gas_brake_threshold(CS.out.vEgo)
-            if frogpilot_toggles.sport_plus:
+            if frogpilot_toggles.sport_plus and (CS.out.gearShifter == GearShifter.sport or not frogpilot_toggles.map_acceleration):
               self.apply_gas = int(round(interp(accel, self.params.EV_GAS_LOOKUP_BP_PLUS, self.params.GAS_LOOKUP_V_PLUS)))
             else:
               self.apply_gas = int(round(interp(accel, self.params.EV_GAS_LOOKUP_BP, self.params.GAS_LOOKUP_V)))
             self.apply_brake = int(round(interp(brake_accel, self.params.EV_BRAKE_LOOKUP_BP, self.params.BRAKE_LOOKUP_V)))
           else:
-            if frogpilot_toggles.sport_plus:
+            if frogpilot_toggles.sport_plus and (CS.out.gearShifter == GearShifter.sport or not frogpilot_toggles.map_acceleration):
               self.apply_gas = int(round(interp(accel, self.params.GAS_LOOKUP_BP_PLUS, self.params.GAS_LOOKUP_V_PLUS)))
             else:
               self.apply_gas = int(round(interp(accel, self.params.GAS_LOOKUP_BP, self.params.GAS_LOOKUP_V)))
