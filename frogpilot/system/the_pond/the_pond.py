@@ -13,6 +13,7 @@ import secrets
 import signal
 import subprocess
 import time
+import traceback
 
 from cereal import car
 from openpilot.common.realtime import DT_HW
@@ -199,20 +200,34 @@ def setup(app):
   @app.route("/api/routes", methods=["GET"])
   def list_routes():
     routes = []
+
+    print("FOOTAGE_PATHS:", FOOTAGE_PATHS, flush=True)
+
     for footage_path in FOOTAGE_PATHS:
-      for name in helpers.get_routes_names(footage_path):
+      print("scanning", footage_path, flush=True)
+      names = helpers.get_routes_names(footage_path)
+      print("found", len(names), "routes:", names, flush=True)
+
+      for name in names:
         path = f"{footage_path}{name}--0"
         qcamera = f"{path}/qcamera.ts"
+        print("building previews for", qcamera, flush=True)
 
-        utilities.video_to_gif(qcamera, f"{path}/preview.gif")
-        utilities.video_to_png(qcamera, f"{path}/preview.png")
+        try:
+          utilities.video_to_gif(qcamera, f"{path}/preview.gif")
+          utilities.video_to_png(qcamera, f"{path}/preview.png")
+        except Exception as e:
+          print("thumbnail generation failed for", qcamera)
+          traceback.print_exc()
 
         routes.append({
           "name": name,
           "gif": f"/thumbnails/{name}--0/preview.gif",
           "png": f"/thumbnails/{name}--0/preview.png",
         })
-    return routes, 200
+
+    print("returning", len(routes), "routes", flush=True)
+    return jsonify(routes), 200
 
   @app.route("/api/routes/<name>", methods=["GET"])
   def get_route(name):
