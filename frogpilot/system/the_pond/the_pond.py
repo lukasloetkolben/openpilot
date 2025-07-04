@@ -628,6 +628,10 @@ def setup(app):
     params.put("SecOCKeys", json.dumps(keys))
     return jsonify(keys)
 
+  @app.route("/api/tsk_keys", methods=["GET"])
+  def get_secoc_keys():
+    return jsonify(json.loads(params.get("SecOCKeys", "[]")))
+
   @app.route("/api/tsk_keys", methods=["POST"])
   def save_secoc_keys():
     keys = request.get_json() or []
