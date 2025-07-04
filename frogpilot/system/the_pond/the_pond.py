@@ -618,7 +618,7 @@ def setup(app):
     with car.CarParams.from_bytes(params.get("CarParamsPersistent")) as cp_reader:
       CP = cp_reader.as_builder()
 
-    return jsonify({"result": CP.secOcRequired})
+    return jsonify({"result": not CP.secOcRequired})
 
   @app.route("/api/tsk_keys", methods=["DELETE"])
   def delete_secoc_key():
