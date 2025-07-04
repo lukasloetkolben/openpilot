@@ -14,6 +14,7 @@ import { SpeedLimits } from "./speed_limits.js"
 import { TailscaleControl } from "./tailscale.js"
 import { TmuxLog } from "./tmux.js"
 import { ToggleControl } from "./toggles.js"
+import { TSKManager } from "./tsk_manager.js"
 
 let router, routerState
 
@@ -40,6 +41,7 @@ function Root() {
     createRoute("tailscale", "/tailscale", TailscaleControl),
     createRoute("tmux", "/tmux", TmuxLog),
     createRoute("toggles", "/toggles", ToggleControl),
+    createRoute("tsk_manager", "/tsk_manager", TSKManager),
   ]
 
   router = createRouter({

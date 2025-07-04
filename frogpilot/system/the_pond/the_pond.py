@@ -613,6 +613,27 @@ def setup(app):
     old_path.rename(new_path)
     return jsonify({"message": f"Renamed {old} to {new}"}), 200
 
+  @app.route("/api/tsk_available", methods=["GET"])
+  def tsk_available():
+    with car.CarParams.from_bytes(params.get("CarParamsPersistent")) as cp_reader:
+      CP = cp_reader.as_builder()
+
+    return jsonify({"result": CP.secOcRequired})
+
+  @app.route("/api/tsk_keys", methods=["DELETE"])
+  def delete_secoc_key():
+    name = request.args.get("name")
+    keys = json.loads(params.get("SecOCKeys") or "[]")
+    keys = [key for key in keys if key.get("name") != name]
+    params.put("SecOCKeys", json.dumps(keys))
+    return jsonify(keys)
+
+  @app.route("/api/tsk_keys", methods=["POST"])
+  def save_secoc_keys():
+    keys = request.get_json() or []
+    params.put("SecOCKeys", json.dumps(keys))
+    return jsonify(keys)
+
   def xor_encrypt_decrypt(data: str, key: str) -> str:
     return ''.join(chr(ord(c) ^ ord(key[i % len(key)])) for i, c in enumerate(data))
 
