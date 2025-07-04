@@ -98,6 +98,7 @@ public:
   QByteArray saveHeaderState() const { return view->header()->saveState(); }
   bool restoreHeaderState(const QByteArray &state) const { return view->header()->restoreState(state); }
   void suppressHighlighted();
+  void exportToCSV(const QString &file_path);
 
 signals:
   void msgSelectionChanged(const MessageId &message_id);

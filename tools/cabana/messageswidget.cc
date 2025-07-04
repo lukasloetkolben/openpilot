@@ -1,6 +1,10 @@
 #include "tools/cabana/messageswidget.h"
 
 #include <QAction>
+#include <QDebug>
+#include <QFile>
+#include <QFileDialog>
+#include <QTextStream>
 #include <limits>
 #include <utility>
 
@@ -77,22 +81,47 @@ MessagesWidget::MessagesWidget(QWidget *parent) : menu(new QMenu(this)), QWidget
 
 QWidget *MessagesWidget::createToolBar() {
   QWidget *toolbar = new QWidget(this);
-  QHBoxLayout *layout = new QHBoxLayout(toolbar);
-  layout->setContentsMargins(0, 9, 0, 0);
-  layout->addWidget(suppress_add = new QPushButton("Suppress Highlighted"));
-  layout->addWidget(suppress_clear = new QPushButton());
-  suppress_clear->setToolTip(tr("Clear suppressed"));
-  layout->addStretch(1);
+  QHBoxLayout *hl = new QHBoxLayout(toolbar);
+  hl->setContentsMargins(0, 9, 0, 0);
+  hl->setSpacing(style()->pixelMetric(QStyle::PM_LayoutHorizontalSpacing));
+
+  suppress_add = new QPushButton(tr("Suppress Highlighted"), this);
+  suppress_clear = new QPushButton(tr("Clear Suppressed"), this);
+  suppress_clear->setVisible(false);
+  suppress_clear->setStyleSheet("text-decoration: underline;");
+  suppress_add->setVisible(false);
+  suppress_add->setStyleSheet("text-decoration: underline;");
+  
+  hl->addWidget(suppress_add);
+  hl->addWidget(suppress_clear);
+  hl->addStretch(1);
+  
+  QPushButton *export_btn = new QPushButton(tr("Export to CSV"), this);
+  export_btn->setToolTip(tr("Export message list to CSV file"));
+  hl->addWidget(export_btn);
+  
+  connect(export_btn, &QPushButton::clicked, this, [this]() {
+    QString file_path = QFileDialog::getSaveFileName(this, tr("Export Messages"), 
+                                                   QDir::homePath(), 
+                                                   tr("CSV Files (*.csv)"));
+    if (!file_path.isEmpty()) {
+      if (!file_path.endsWith(".csv", Qt::CaseInsensitive)) {
+        file_path += ".csv";
+      }
+      exportToCSV(file_path);
+    }
+  });
+  
   QCheckBox *suppress_defined_signals = new QCheckBox(tr("Suppress Signals"), this);
   suppress_defined_signals->setToolTip(tr("Suppress defined signals"));
   suppress_defined_signals->setChecked(settings.suppress_defined_signals);
-  layout->addWidget(suppress_defined_signals);
+  hl->addWidget(suppress_defined_signals);
 
   auto view_button = new ToolButton("three-dots", tr("View..."));
   view_button->setMenu(menu);
   view_button->setPopupMode(QToolButton::InstantPopup);
   view_button->setStyleSheet("QToolButton::menu-indicator { image: none; }");
-  layout->addWidget(view_button);
+  hl->addWidget(view_button);
 
   QObject::connect(suppress_add, &QPushButton::clicked, this, &MessagesWidget::suppressHighlighted);
   QObject::connect(suppress_clear, &QPushButton::clicked, this, &MessagesWidget::suppressHighlighted);
@@ -159,7 +188,85 @@ void MessagesWidget::setMultiLineBytes(bool multi) {
   view->doItemsLayout();
 }
 
-// MessageListModel
+QString formatByteArray(const QByteArray &data) {
+  return data.toHex(' ').toUpper();
+}
+
+void MessagesWidget::exportToCSV(const QString &file_path) {
+  qDebug() << "Starting CSV export";
+  
+  QFile file(file_path);
+  if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    qWarning("Failed to open file for writing: %s", qPrintable(file_path));
+    return;
+  }
+
+  QTextStream out(&file);
+  qDebug() << "File opened successfully";
+  
+  // Write headers
+  out << "\"Name\",\"Bus\",\"ID\",\"Node\",\"Freq\",\"Count\",\"Bytes\"\n";
+  qDebug() << "Headers written";
+  
+  // Get all messages from the model
+  const auto &items = static_cast<MessageListModel*>(model)->items_;
+  qDebug() << "Total messages to process:" << items.size();
+  
+  // Write data rows
+  for (const auto &item : items) {
+    // Skip inactive messages
+    if (!can->isMessageActive(item.id)) {
+      continue;
+    }
+    
+    QStringList rowData;
+    
+    try {
+      // Get the last message data from CAN bus
+      const auto &msg = can->lastMessage(item.id);
+      
+      // Name
+      rowData << '"' + item.name + '"';
+      
+      // Bus
+      rowData << QString("\"%1\"").arg(item.id.source != 0xFF ? QString::number(item.id.source) : "N/A");
+      
+      // ID
+      rowData << QString("\"%1\"").arg(QString::number(item.id.address, 16).toUpper());
+      
+      // Node
+      rowData << '"' + item.node + '"';
+      
+      // Freq
+      rowData << QString("\"%1\"").arg(msg.freq > 0 ? QString::number(msg.freq, 'f', 2) : "--");
+      
+      // Count
+      rowData << QString("\"%1\"").arg(msg.count);
+      
+      // Bytes
+      QString bytes_str = !msg.dat.empty() ? 
+        '"' + formatByteArray(QByteArray((const char*)msg.dat.data(), msg.dat.size())) + '"' : 
+        "\"\"";
+      rowData << bytes_str;
+      
+      out << rowData.join(",") << "\n";
+      
+    } catch (const std::exception &e) {
+      qWarning() << "Error processing message" << item.id.toString() << ":" << e.what();
+    } catch (...) {
+      qWarning() << "Unknown error processing message" << item.id.toString();
+    }
+    
+    // Keep the UI responsive
+    static int count = 0;
+    if (++count % 10 == 0) {
+      QCoreApplication::processEvents();
+    }
+  }
+  
+  file.close();
+  qDebug() << "CSV export completed";
+}
 
 QVariant MessageListModel::headerData(int section, Qt::Orientation orientation, int role) const {
   if (orientation == Qt::Horizontal && role == Qt::DisplayRole) {
