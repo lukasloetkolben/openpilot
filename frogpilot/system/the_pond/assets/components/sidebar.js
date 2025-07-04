@@ -12,7 +12,6 @@ const MenuItems = {
   ],
   recordings: [
     { name: "Dashcam Routes", link: "/routes", icon: "bi-camera-reels" },
-    { name: "Saved Routes", link: "/saved_routes", icon: "bi-box2-heart" },
     { name: "Screen Recordings", link: "/screen_recordings", icon: "bi-record-circle" },
   ],
   tailscale: [
@@ -24,12 +23,15 @@ const MenuItems = {
     { name: "Lock/Unlock Doors", link: "/doors", icon: "bi-door-closed" },
     { name: "Tmux Log", link: "/tmux", icon: "bi-terminal" },
     { name: "Toggles", link: "/toggles", icon: "bi-toggle-on" },
+    { name: "Toyota Security Keys", link: "/tsk_manager", icon: "bi-key-fill" },
   ],
 };
 
 const state = reactive({
   doorsVisible: false,
   isDoorsFetched: false,
+  isTSKFetched: true,
+  tskVisible: true,
 
   activeRoute: ""
 });
@@ -48,6 +50,19 @@ export function Sidebar() {
         state.doorsVisible = data.result;
       } catch (e) {
         console.error("Failed to fetch door availability:", e);
+      }
+    })();
+  }
+
+  if (!state.isTSKFetched) {
+    state.isTSKFetched = true;
+    (async () => {
+      try {
+        const response = await fetch("/api/tsk_available");
+        const data = await response.json();
+        state.tskVisible = data.result;
+      } catch (e) {
+        console.error("Failed to fetch TSK availability:", e);
       }
     })();
   }
@@ -87,6 +102,10 @@ export function Sidebar() {
                 <ul id="${section}">
                   ${links.map(link => {
                     if (link.name === "Lock/Unlock Doors" && !state.doorsVisible) {
+                      return "";
+                    }
+
+                    if (link.name === "Toyota Security Key" && !state.tskVisible) {
                       return "";
                     }
 

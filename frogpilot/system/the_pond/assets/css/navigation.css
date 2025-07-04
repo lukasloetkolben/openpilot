@@ -475,3 +475,24 @@
     width: calc(100% - var(--padding-xl));
   }
 }
+
+.edit-favorite-button,
+.remove-favorite-button {
+  background : none;
+  border     : none;
+  cursor     : pointer;
+  font-size  : 1rem;
+  padding    : 0.25rem;
+  transition : transform 0.1s ease;
+}
+
+.edit-favorite-button   { color: var(--thumb-color); }
+.edit-favorite-button:hover   { transform: scale(1.2); }
+.remove-favorite-button:hover { transform: scale(1.2); }
+
+#searchSuggestions span > .edit-favorite-button {
+  position : absolute;
+  right    : calc(var(--border-radius-xl) + 2rem);
+  top      : 50%;
+  transform: translateY(-50%);
+}

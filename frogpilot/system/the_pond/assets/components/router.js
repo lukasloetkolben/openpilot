@@ -6,13 +6,15 @@ import { ErrorLogs } from "./error_logs.js"
 import { Home } from "./home.js"
 import { NavDestination } from "./navigation/navigation_destination.js"
 import { NavKeys } from "./navigation/navigation_keys.js"
-import { RecordedRoute, RecordedRoutes } from "./recordings/recordings.js"
+import { RouteRecordings } from "./recordings/recordings.js"
 import { SettingsView } from "./settings/settings.js"
+import { ScreenRecordings } from "./recordings/screen_recordings.js"
 import { Sidebar } from "./sidebar.js"
 import { SpeedLimits } from "./speed_limits.js"
 import { TailscaleControl } from "./tailscale.js"
 import { TmuxLog } from "./tmux.js"
 import { ToggleControl } from "./toggles.js"
+import { TSKManager } from "./tsk_manager.js"
 
 let router, routerState
 
@@ -32,13 +34,14 @@ function Root() {
     createRoute("navdestination", "/navigation", NavDestination),
     createRoute("navkeys", "/navigation_keys", NavKeys),
     createRoute("root", "/", Home),
-    createRoute("route", "/routes/:routeDate", RecordedRoute),
-    createRoute("routes", "/routes", RecordedRoutes),
+    createRoute("routes", "/routes", RouteRecordings),
+    createRoute("screen_recordings", "/screen_recordings", ScreenRecordings),
     createRoute("settings", "/settings/:section/:subsection?", SettingsView),
     createRoute("speed_limits", "/speed_limits", SpeedLimits),
     createRoute("tailscale", "/tailscale", TailscaleControl),
     createRoute("tmux", "/tmux", TmuxLog),
     createRoute("toggles", "/toggles", ToggleControl),
+    createRoute("tsk_manager", "/tsk_manager", TSKManager),
   ]
 
   router = createRouter({

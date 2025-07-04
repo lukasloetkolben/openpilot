@@ -300,6 +300,41 @@ export function NavDestination () {
     }
   }
 
+  async function editFavoriteName (fav, newName) {
+    try {
+      handleFavoritesClick()
+
+      showSnackbar("Updating favorite...")
+
+      await fetch("/api/navigation/favorite", {
+        method : "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body   : JSON.stringify(fav)
+      })
+
+      const payload = {
+        name      : newName,
+        longitude : fav.longitude,
+        latitude  : fav.latitude,
+        routeId   : fav.routeId
+      }
+
+      await fetch("/api/navigation/favorite", {
+        method : "POST",
+        headers: { "Content-Type": "application/json" },
+        body   : JSON.stringify(payload)
+      })
+
+      await handleFavoritesClick()
+    } catch (err) {
+      console.error("Failed to edit favorite", err)
+      showSnackbar("Failed to edit favorite…")
+      if (!state.favoritesVisible) {
+        await handleFavoritesClick()
+      }
+    }
+  }
+
   async function removeFavorite({ name, latitude, longitude, routeId }) {
     try {
       await fetch("/api/navigation/favorite", {
@@ -547,7 +582,8 @@ export function NavDestination () {
                         return SearchSuggestions({
                           suggestions: JSON.parse(state.suggestions),
                           selectSuggestion,
-                          removeFavorite
+                          removeFavorite,
+                          editFavoriteName
                         })
                       }
                     }}
@@ -560,32 +596,38 @@ export function NavDestination () {
   `
 }
 
-function SearchSuggestions ({ suggestions, selectSuggestion, removeFavorite }) {
+function SearchSuggestions ({ suggestions, selectSuggestion, removeFavorite, editFavoriteName }) {
   const isFavorite = s =>
     s.name && s.latitude != null && s.longitude != null && s.routeId
 
-  const item = s => html`
-    <span>
-      <p @click="${() => selectSuggestion(s)}">${s.name || s.address}</p>
-      ${isFavorite(s)
-        ? html`<button
+    const item = s => html`
+      <span>
+        <p @click="${() => selectSuggestion(s)}">${s.name || s.address}</p>
+
+        ${isFavorite(s) ? html`
+          <button
+            class="edit-favorite-button"
+            title="Rename Favorite"
+            @click="${e => {
+              e.stopPropagation()
+              const newName = prompt("Edit favorite name:", s.name)
+              if (newName && newName.trim() && newName !== s.name) {
+                editFavoriteName(s, newName.trim())
+              }
+            }}"
+          >✏️</button>
+
+          <button
             class="remove-favorite-button"
             title="Remove from Favorites"
             @click="${e => {
               e.stopPropagation()
-              removeFavorite({
-                name: s.name,
-                latitude: s.latitude,
-                longitude: s.longitude,
-                routeId: s.routeId
-              })
+              removeFavorite(s)
             }}"
-          >
-            🗑️
-          </button>`
-        : ''}
-    </span>
-  `
+          >🗑️</button>
+        ` : ''}
+      </span>
+    `
 
   return html`<div id="searchSuggestions">${suggestions.map(item)}</div>`
 }

@@ -469,6 +469,7 @@ std::unordered_map<std::string, uint32_t> keys = {
     {"ScreenTimeout", PERSISTENT},
     {"ScreenTimeoutOnroad", PERSISTENT},
     {"SearchInput", PERSISTENT},
+    {"SecOCKeys", PERSISTENT | DONT_LOG},
     {"SetSpeedLimit", PERSISTENT},
     {"SetSpeedOffset", PERSISTENT},
     {"ShowCEMStatus", PERSISTENT},

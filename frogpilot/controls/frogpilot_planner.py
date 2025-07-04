@@ -52,7 +52,7 @@ class FrogPilotPlanner:
     self.lead_one = sm["radarState"].leadOne
 
     v_cruise = min(sm["controlsState"].vCruise, V_CRUISE_MAX) * CV.KPH_TO_MS
-    v_ego = max(sm["carState"].vEgo, sm["carState"].vEgoCluster)
+    v_ego = max(sm["carState"].vEgo, 0)
 
     if sm["controlsState"].enabled:
       self.frogpilot_acceleration.update(v_ego, sm, frogpilot_toggles)

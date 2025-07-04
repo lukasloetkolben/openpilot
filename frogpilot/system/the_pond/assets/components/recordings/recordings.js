@@ -1,191 +1,239 @@
 import { html, reactive } from "https://esm.sh/@arrow-js/core"
+import { getOrdinalSuffix } from "../navigation/navigation_utils.js"
 
-const routesStore = reactive({
-  list: null,
-  loading: false,
-  error: null
+const state = reactive({
+  loading: true,
+  error: null,
+  routes: [],
+  selectedRoute: null,
+  isButtonDisabled: false,
+  showPreservedOnly: false,
 })
 
-async function loadRoutes() {
-  if (routesStore.list || routesStore.loading) return
-  routesStore.loading = true
+function formatRouteDate(dateString) {
+  const date = new Date(dateString)
+  const month = date.toLocaleString("en-US", { month: "long" })
+  const day = date.getDate()
+  const year = date.getFullYear()
+  let hour = date.getHours()
+  const minute = date.getMinutes()
+  const ampm = hour >= 12 ? "pm" : "am"
+  hour = hour % 12
+  hour = hour || 12
+  const minuteStr = minute < 10 ? "0" + minute : minute
+  return `${month} ${day}${getOrdinalSuffix(day)}, ${year} - ${hour}:${minuteStr}${ampm}`
+}
+
+async function fetchRoutes() {
   try {
-    const res = await fetch("/api/routes")
-    routesStore.list = await res.json()
-  } catch (err) {
-    routesStore.error = err
+    const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    const r = await fetch(`/api/routes?timezone=${encodeURIComponent(userTimezone)}`)
+    if (!r.ok) throw new Error()
+    const routes = await r.json()
+    state.routes = routes.map(route => ({
+      ...route,
+      timestamp: formatRouteDate(route.timestamp),
+    }))
+  } catch (_) {
+    state.error = "Couldn't load routes. Please try again later."
   } finally {
-    routesStore.loading = false
+    state.loading = false
   }
 }
 
-export function RecordedRoutes() {
-  loadRoutes()
-  return html`
-    <h1>Dashcam Routes</h1>
-    <p>View & download recorded routes.</p>
-    <div class="route_grid">
-      ${() => {
-        if (routesStore.loading) return html`<div>Loading…</div>`
-        if (routesStore.error) return html`<div>Failed to load</div>`
-        if (!routesStore.list?.length) return html`<div>No routes found</div>`
-        return routesStore.list.map(r => {
-          const date = new Date(r.date).toLocaleString()
-          return html`
-            <a href="/routes/${r.name}" class="route_card">
-              <div class="route_preview">
-                <img src="${r.gif}" />
-                <img class="image_preview" src="${r.png}" />
-              </div>
-              <p class="route_name">${date}</p>
-            </a>`
-        })
-      }}
-    </div>
-  `
+fetchRoutes()
+
+function refresh() {
+  state.loading = true
+  fetchRoutes()
 }
 
-const routeCache = new Map()
+let overlay = null
 
-async function getRoute(name) {
-  if (routeCache.has(name)) return routeCache.get(name)
-  const p = fetch(`/api/routes/${name}.json`).then(r => r.json())
-  routeCache.set(name, p)
-  return p
+function openDialog(htmlStr) {
+  const o = document.createElement("div")
+  o.className = "dialog-overlay"
+  o.innerHTML = htmlStr
+  document.body.appendChild(o)
+  return o
 }
 
-export function RecordedRoute({ params }) {
-  const state = reactive({
-    route: null,
-    selectedCamera: "front",
-    currentIndex: 0,
-    playing: true,
-    isSeeking: false,
-    currentTime: 0
-  })
+function closeDialog(o) {
+  if (o) o.remove()
+}
 
-  getRoute(params.name).then(data => state.route = data)
-
-  function playPauseHandler() {
-    const v = document.getElementById("video")
-    state.playing = v.paused
-    state.playing ? v.play() : v.pause()
-  }
-
-  function fullscreenHandler() {
-    const v = document.getElementById("video")
-    v.requestFullscreen?.() || v.webkitRequestFullscreen?.()
-  }
-
-  function videoEndedHandler(e) {
-    const v = e.target
-    state.currentIndex = (state.currentIndex + 1) % state.route.segment_urls.length
-    v.src = state.route.segment_urls[state.currentIndex]
-    v.load()
-    v.play()
-  }
-
-  function timeupdateHandler(e) {
-    if (state.isSeeking) return
-    const v = e.target
-    state.currentTime = state.currentIndex * 60 + Math.round(v.currentTime)
-  }
-
-  function mousedownHandler() {
-    state.isSeeking = true
-  }
-
-  async function mouseupHandler(e) {
-    state.isSeeking = false
-    const v = document.getElementById("video")
-    const s = e.target
-    const val = Number(s.value)
-    const idx = Math.floor(val / 60)
-    if (idx !== state.currentIndex) {
-      state.currentIndex = idx
-      v.src = urlForIdx(state.route, state.selectedCamera, idx)
-      v.load()
-      v.play()
-      for (let i = 0; i < 10; i++) {
-        await new Promise(r => setTimeout(r, 100))
-        if (v.duration > 2) break
-      }
+async function deleteRoute(route) {
+  const dlg = openDialog(`
+    <div class="dialog-box">
+      <p>Delete “${route.timestamp}”?</p>
+      <div class="dialog-buttons">
+        <button class="btn-cancel">Cancel</button>
+        <button class="btn-del">Delete</button>
+      </div>
+    </div>`)
+  dlg.querySelector(".btn-cancel").onclick = () => closeDialog(dlg)
+  dlg.querySelector(".btn-del").onclick = async () => {
+    const res = await fetch(`/api/routes/${route.name}`, { method: "DELETE" })
+    if (res.ok) {
+      closeDialog(dlg)
+      closeOverlay()
+      refresh()
+    } else {
+      showSnackbar("Delete failed", "error")
     }
-    v.currentTime = val - state.currentIndex * 60
   }
+}
 
-  function urlForIdx(r, cam, i) {
-    let u = r.segment_urls[i]
-    if (cam === "driver") u += "?camera=driver"
-    else if (cam === "wide") u += "?camera=wide"
-    return u
-  }
-
-  function fmt(sec) {
-    const h = Math.floor(sec / 3600)
-    const m = Math.floor((sec % 3600) / 60)
-    const s = Math.floor(sec % 60)
-    return `${h ? h + ":" : ""}${m < 10 ? "0" : ""}${m}:${s < 10 ? "0" : ""}${s}`
-  }
-
-  function render(r) {
-    const date = new Date(r.date).toLocaleString()
-    const dur = fmt(r.total_duration)
-    const isWide = r.available_cameras.includes("wide")
-    const isDriver = r.available_cameras.includes("driver")
-    return html`
-      <h1 id="route_name">${date}</h1>
-      <div class="camera_selector">
-        <div class="selected_camera" id="forward"><p>Forward Camera</p></div>
-        <div class="${isWide ? "" : "unavailable"}" id="wide"><p>Wide Camera</p></div>
-        <div class="${isDriver ? "" : "unavailable"}" id="driver"><p>Driver Camera</p></div>
+async function openOverlay(route) {
+  if (overlay) return
+  state.isButtonDisabled = true
+  let data = null
+  try {
+    const r = await fetch(`/api/routes/${route.name}`)
+    if (r.ok) data = await r.json()
+  } catch (_) {}
+  const segments = data?.segment_urls ?? [`/video/${route.name}--0`]
+  let current = 0
+  let selectedCamera = "forward"
+  overlay = document.createElement("div")
+  overlay.className = "media-player-overlay"
+  overlay.innerHTML = `
+    <div class="media-player-content">
+      <div class="media-player-title">${route.timestamp}</div>
+      <video controls autoplay muted>
+        <source src="${segments[0]}" type="video/mp4">
+      </video>
+      <div class="button-row">
+        <button class="close-button action-close">Close</button>
+        <button class="close-button camera-button active" data-camera="forward">Forward</button>
+        <button class="close-button camera-button" data-camera="wide">Wide</button>
+        <button class="close-button camera-button" data-camera="driver">Driver</button>
+        <a href="/video/${route.name}--0?camera=forward" download="${route.name}-forward.mp4" class="close-button action-download">Download</a>
+        <button class="close-button action-delete">Delete</button>
       </div>
-      <div class="video_wrapper">
-        <video
-          id="video"
-          autoplay
-          muted
-          playsinline
-          @click="${playPauseHandler}"
-          @fullscreenchange="${e => e.target.controls = !!document.fullscreenElement}"
-          @ended="${videoEndedHandler}"
-          @timeupdate="${timeupdateHandler}"
-        >
-          <source src="${r.segment_urls[0]}" type="video/mp4" />
-        </video>
-        <div class="videocontrols">
-          <button id="playpause" @click="${playPauseHandler}">
-            ${() => state.playing ? html`<i class="bi bi-pause-fill"></i>` : html`<i class="bi bi-play-fill"></i>`}
-          </button>
-          <input
-            id="seekslider"
-            type="range"
-            min="0"
-            max="${r.total_duration}"
-            value="${() => state.currentTime}"
-            @mousedown="${mousedownHandler}"
-            @mouseup="${mouseupupHandler}"
-            @input="${e => state.currentTime = e.target.value}"
-            @change="${mouseupupHandler}"
-            step="1"
-          />
-          <p>
-            <span id="current-time">${() => fmt(state.currentTime)}</span>
-            /
-            <span id="duration">${dur}</span>
-          </p>
-          <button id="fullscreen" @click="${fullscreenHandler}">
-            <i class="bi bi-fullscreen"></i>
-          </button>
-        </div>
-      </div>
-    `
-  }
+    </div>`
+  overlay.addEventListener("click", e => {
+    if (e.target === overlay) closeOverlay()
+  })
+  overlay.querySelector(".action-close").onclick = closeOverlay
+  overlay.querySelector(".action-delete").onclick = () => deleteRoute(route)
+  const vid = overlay.querySelector("video")
+  const downloadLink = overlay.querySelector(".action-download")
+  vid.addEventListener("ended", () => {
+    current++
+    if (current < segments.length) {
+      const videoPath = `/video/${route.name}--${current}?camera=${selectedCamera}`
+      vid.src = videoPath
+      downloadLink.href = videoPath
+      vid.play()
+    }
+  })
+  overlay.querySelectorAll(".camera-button").forEach(button => {
+    button.addEventListener("click", e => {
+      overlay.querySelectorAll(".camera-button").forEach(btn => btn.classList.remove("active"))
+      e.target.classList.add("active")
+      selectedCamera = e.target.dataset.camera
+      const videoPath = `/video/${route.name}--${current}?camera=${selectedCamera}`
+      vid.src = videoPath
+      downloadLink.href = videoPath
+      downloadLink.download = `${route.name}-${selectedCamera}.mp4`
+      vid.play()
+    })
+  })
+  document.body.appendChild(overlay)
+  setTimeout(() => {
+    state.isButtonDisabled = false
+  }, 2000)
+}
 
+function closeOverlay() {
+  if (!overlay) return
+  overlay.remove()
+  overlay = null
+  state.selectedRoute = null
+}
+
+async function togglePreserved(route, e) {
+  e.stopPropagation()
+  const newPreservedState = !route.is_preserved
+  const method = newPreservedState ? "POST" : "DELETE"
+  try {
+    const response = await fetch(`/api/routes/${route.name}/preserve`, { method })
+    if (response.ok) {
+      route.is_preserved = newPreservedState
+    } else {
+      showSnackbar("Failed to update preserved state.", "error")
+    }
+  } catch (_) {
+    showSnackbar("An error occurred.", "error")
+  }
+}
+
+export function RouteRecordings() {
+  if (state.selectedRoute && !overlay) openOverlay(state.selectedRoute)
   return html`
-    <div class="route">
-      <a href="/routes" class="button">Back</a>
-      ${() => state.route ? render(state.route) : "Loading…"}
+    <div class="screen-recordings-wrapper">
+      <div class="screen-recordings-widget">
+        <div class="screen-recordings-title">Dashcam Routes</div>
+        <button
+          class="show-preserved-button"
+          @click="${() => (state.showPreservedOnly = !state.showPreservedOnly)}"
+          ?disabled="${state.loading}"
+        >
+          ${() => (state.showPreservedOnly ? "Show All" : "Show Only Preserved Routes")}
+        </button>
+        ${() => {
+          if (state.loading) return html`<p class="screen-recordings-message">Loading…</p>`
+          if (state.error) return html`<p class="screen-recordings-message">${state.error}</p>`
+          const routesToShow = state.routes.filter(r => !state.showPreservedOnly || r.is_preserved)
+          if (!routesToShow.length) return html`<p class="screen-recordings-message">No routes found.</p>`
+          return html`
+            <div class="screen-recordings-grid">
+              ${routesToShow.map(
+                route => html`
+                  <div
+                    class="recording-card"
+                    @mouseenter="${e => {
+                      if (!state.selectedRoute) {
+                        const c = e.currentTarget
+                        c.querySelector(".recording-preview-png").style.display = "none"
+                        c.querySelector(".recording-preview-gif").style.display = "block"
+                      }
+                    }}"
+                    @mouseleave="${e => {
+                      const c = e.currentTarget
+                      c.querySelector(".recording-preview-png").style.display = "block"
+                      c.querySelector(".recording-preview-gif").style.display = "none"
+                    }}"
+                    @click="${() => {
+                      if (!state.isButtonDisabled) {
+                        state.selectedRoute = route
+                      }
+                    }}"
+                  >
+                    <div class="preserved-icon" @click="${e => togglePreserved(route, e)}">
+                      ${() => html`<i class="bi ${route.is_preserved ? "bi-heart-fill" : "bi-heart"}"></i>`}
+                    </div>
+                    <div class="recording-preview-container">
+                      <img
+                        src="${route.png}"
+                        class="recording-preview recording-preview-png"
+                        style="display:block;"
+                      >
+                      <img
+                        src="${route.gif}"
+                        class="recording-preview recording-preview-gif"
+                        style="display:none;"
+                      >
+                    </div>
+                    <p class="recording-filename">${route.timestamp}</p>
+                  </div>
+                `,
+              )}
+            </div>
+          `
+        }}
+      </div>
     </div>
   `
 }

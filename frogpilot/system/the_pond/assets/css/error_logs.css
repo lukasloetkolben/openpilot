@@ -46,18 +46,18 @@
   max-width: var(--width-xxl);
   scrollbar-color: var(--thumb-color) var(--track-color);
   transition: box-shadow var(--transition-fast), transform var(--transition-fast);
+  padding: var(--padding-base);
+  width: 100%;
 }
 
-#errorLogs #fileList:hover {
+#errorLogs #fileList:hover,
+#errorLogs #fileViewer:hover {
   box-shadow: var(--shadow-md);
   transform: var(--hover-scale-sm);
 }
 
 #errorLogs #fileViewer {
-  max-height: calc(100vh - 270px);
-  max-width: var(--width-xxl);
-  overflow: auto;
-  padding: var(--padding-base);
+  max-height: 200px;
   scrollbar-width: auto;
 }
 
@@ -90,16 +90,12 @@
   transform: var(--hover-scale-sm);
 }
 
-#errorLogs #fileViewer:hover {
-  box-shadow: var(--shadow-md);
-  transform: var(--hover-scale-sm);
-}
-
 #errorLogs #fileViewer pre {
   color: var(--main-fg);
   font-family: var(--font-mono);
   white-space: pre-wrap;
   word-wrap: break-word;
+  margin-top: var(--padding-sm);
 }
 
 #errorLogs p {
@@ -115,6 +111,40 @@
   }
 
   #errorLogs #fileViewer {
-    width: calc(100% - var(--padding-xl) - 40px);
+    width: calc(100% - var(--padding-xl));
   }
+}
+
+.error-logs-wrapper #errorLogs #fileList {
+  background-color: var(--sidebar-bg);
+  border-radius: var(--border-radius-lg);
+  margin-left: 0;
+  max-height: 200px;
+  max-width: var(--width-xxl);
+  overflow-y: auto;
+  padding: var(--padding-base);
+  scrollbar-color: var(--thumb-color) var(--track-color);
+  scrollbar-width: auto;
+  width: 100%;
+}
+
+.error-logs-wrapper #errorLogs #fileList .fileEntry {
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  padding: var(--padding-sm) var(--padding-base);
+}
+
+.error-logs-wrapper #errorLogs #fileList .fileEntry:not(:last-child) {
+  border-bottom: 1px solid var(--sidebar-border-color);
+}
+
+.error-logs-wrapper #errorLogs #fileList .fileEntry:hover {
+  background-color: var(--sidebar-active-bg);
+}
+
+.error-logs-wrapper #errorLogs #fileList .fileEntry.header {
+  background-color: var(--secondary-bg);
+  cursor: default;
+  font-weight: bold;
 }

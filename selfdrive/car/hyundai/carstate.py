@@ -301,6 +301,8 @@ class CarState(CarStateBase):
                                           else cp_cam.vl["CAM_0x2a4"])
 
     # FrogPilot CarState functions
+    self.params = CarControllerParams(self.CP, ret.vEgoRaw, frogpilot_toggles)
+
     fp_ret.brakeLights = bool(cp.vl["TCS"]["DriverBraking"])
 
     if self.FPCP.fpFlags & HyundaiFrogPilotFlags.NAV_MSG:

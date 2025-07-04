@@ -50,6 +50,7 @@ RANDOM_EVENTS_PATH = Path(__file__).parents[1] / "assets/random_events"
 THEME_SAVE_PATH = Path("/data/themes")
 
 ERROR_LOGS_PATH = Path("/data/error_logs")
+SCREEN_RECORDINGS_PATH = Path("/data/media/screen_recordings")
 
 HD_LOGS_PATH = Path("/data/media/0/realdata_HD")
 HD_PATH = Path("/cache/use_HD")
@@ -61,7 +62,7 @@ MAPD_PATH = Path("/data/media/0/osm/mapd")
 MAPS_PATH = Path("/data/media/0/osm/offline")
 
 NEURAL_PARAMS_PATH = Path(BASEDIR) / "selfdrive/car/torque_data/neural_ff_weights.json"
-TORQUE_NN_MODEL_PATH = Path(BASEDIR) / "selfdrive/car/torque_data/lat_models"
+TORQUE_NN_MODEL_PATH = Path(BASEDIR) / "frogpilot/assets/nnff_models"
 
 DEFAULT_CLASSIC_MODEL = "wd-40"
 DEFAULT_CLASSIC_MODEL_NAME = "WD-40 (Default) 👀📡"
@@ -71,8 +72,8 @@ DEFAULT_MODEL = "national-public-radio"
 DEFAULT_MODEL_NAME = "National Public Radio 👀📡"
 DEFAULT_MODEL_VERSION = "v6"
 
-DEFAULT_TINYGRAD_MODEL = "vegetarian-filet-o-fish"
-DEFAULT_TINYGRAD_MODEL_NAME = "Vegetarian Filet o Fish 👀📡"
+DEFAULT_TINYGRAD_MODEL = "tomb-raider"
+DEFAULT_TINYGRAD_MODEL_NAME = "Tomb Raider 👀📡"
 DEFAULT_TINYGRAD_MODEL_VERSION = "v7"
 
 EXCLUDED_KEYS = {
@@ -429,12 +430,12 @@ class FrogPilotVariables:
     self.frogpilot_toggles = get_frogpilot_toggles(block=False)
     self.tuning_levels = {key: lvl for key, _, lvl in frogpilot_default_params + misc_tuning_levels}
 
-    self.short_branch = get_build_metadata().channel
-    self.development_branch = self.short_branch == "FrogPilot-Development"
-    self.release_branch = self.short_branch == "FrogPilot"
-    self.staging_branch = self.short_branch == "FrogPilot-Staging"
-    self.testing_branch = self.short_branch == "FrogPilot-Testing"
-    self.vetting_branch = self.short_branch == "FrogPilot-Vetting"
+    short_branch = get_build_metadata().channel
+    self.development_branch = short_branch == "FrogPilot-Development"
+    self.release_branch = short_branch == "FrogPilot"
+    self.staging_branch = short_branch == "FrogPilot-Staging"
+    self.testing_branch = short_branch == "FrogPilot-Testing"
+    self.vetting_branch = short_branch == "FrogPilot-Vetting"
 
     default = params_default
     level = self.tuning_levels
@@ -832,6 +833,7 @@ class FrogPilotVariables:
     toggle.classic_model = toggle.model_version in {"v1", "v2", "v3", "v4"}
     toggle.planner_curvature_model = toggle.model_version not in {"v1", "v2", "v3", "v4", "v5"}
     toggle.tinygrad_model = toggle.model_version in {"v7"}
+    toggle.tomb_raider = toggle.model == "tomb-raider"
 
     toggle.model_ui = params.get_bool("ModelUI") if tuning_level >= level["ModelUI"] else default.get_bool("ModelUI")
     toggle.dynamic_path_width = toggle.model_ui and (params.get_bool("DynamicPathWidth") if tuning_level >= level["DynamicPathWidth"] else default.get_bool("DynamicPathWidth"))

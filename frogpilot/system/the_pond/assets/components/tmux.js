@@ -1,11 +1,131 @@
 import { html, reactive } from "https://esm.sh/@arrow-js/core"
+import { formatSecondsToHuman, parseErrorLogToDate } from "../js/utils.js"
+
+const logSelectorState = reactive({
+  loading: false,
+  files: [],
+  logsLoadedOnce: false
+});
+
+async function loadTmuxLogs() {
+  if (logSelectorState.loading || logSelectorState.logsLoadedOnce) {
+    return;
+  }
+
+  logSelectorState.loading = true;
+  try {
+    const res = await fetch("/api/tmux_log/list");
+    if (!res.ok) {
+      throw new Error(await res.text());
+    }
+    const data = await res.json();
+    logSelectorState.files = data.map(f => {
+      const date = parseErrorLogToDate(f.replace("tmux_log_", "").replace(".json", "").replace("_", "--"));
+      return {
+        filename: f,
+        date: date.toLocaleString(),
+        timeSince: (Date.now() - date.getTime()) / 1000,
+      };
+    });
+  } catch (err) {
+    showSnackbar(`Failed to fetch logs: ${err.message}`, "error");
+    logSelectorState.files = [];
+  } finally {
+    logSelectorState.loading = false;
+    logSelectorState.logsLoadedOnce = true;
+  }
+}
+
+function TmuxLogSelector({ action, closeFn }) {
+  loadTmuxLogs();
+
+  async function handleFileClick(file) {
+    if (action === "download") {
+      const link = document.createElement("a");
+      link.href = `/api/tmux_log/download/${encodeURIComponent(file.filename)}`;
+      link.download = file.filename;
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+    } else if (action === "rename") {
+      const newName = prompt(`Rename ${file.filename} to:`);
+      if (!newName || newName.trim() === file.filename) {
+        return;
+      }
+      try {
+        const res = await fetch(`/api/tmux_log/rename/${encodeURIComponent(file.filename)}/${encodeURIComponent(newName.trim())}`, {
+          method: "PUT"
+        });
+        if (!res.ok) {
+          throw new Error(await res.text());
+        }
+        showSnackbar(`${file.filename} renamed to ${newName.trim()}`, "success");
+        logSelectorState.files = logSelectorState.files.map(f =>
+          f.filename === file.filename
+            ? { ...f, filename: newName.trim() }
+            : f
+        );
+      } catch (err) {
+        showSnackbar(`Rename failed: ${err.message}`, "error");
+      }
+
+    } else if (action === "delete") {
+      if (!confirm(`Delete ${file.filename}?`)) {
+        return;
+      }
+      try {
+        const res = await fetch(`/api/tmux_log/delete/${encodeURIComponent(file.filename)}`, { method: "DELETE" });
+        if (!res.ok) {
+          throw new Error(await res.text());
+        }
+        showSnackbar(`${file.filename} deleted successfully!`, "success");
+        logSelectorState.files = logSelectorState.files.filter(f => f.filename !== file.filename);
+        if (logSelectorState.files.length === 0) {
+          logSelectorState.logsLoadedOnce = false;
+        }
+      } catch (err) {
+        showSnackbar(`Delete failed: ${err.message}`, "error");
+      }
+    }
+  }
+
+  return html`
+    <div class="tmux-log-selector-wrapper" @click="${(e) => e.target === e.currentTarget && closeFn()}">
+      <div id="fileList">
+        <div class="fileEntry header">
+          <p>Filename</p>
+          <p>Date</p>
+          <p>Age</p>
+        </div>
+        ${() => {
+          if (logSelectorState.loading && !logSelectorState.logsLoadedOnce) {
+            return html`<div class="fileEntry"><p>Loading...</p></div>`;
+          }
+          if (logSelectorState.files.length === 0) {
+            return html`<div class="fileEntry"><p>No tmux logs found!</p></div>`;
+          }
+          return logSelectorState.files.map(file => html`
+            <div class="fileEntry" @click="${() => handleFileClick(file)}">
+              <p>${file.filename}</p>
+              <p>${file.date}</p>
+              <p>${file.timeSince < 60 ? "just now" : `${formatSecondsToHuman(file.timeSince, "minutes")} ago`}</p>
+            </div>
+          `);
+        }}
+        <button @click="${closeFn}" class="cancel-button">Close</button>
+      </div>
+    </div>
+  `
+}
 
 export function TmuxLog() {
   const state = reactive({
     paused: false,
-
     latest: '',
-    log: ''
+    log: '',
+    selectorAction: null,
   })
 
   const event_source = new EventSource("/api/tmux_log/live")
@@ -36,6 +156,8 @@ export function TmuxLog() {
           return res.text().then(msg => { throw new Error(msg) })
         }
         showSnackbar("Current session captured!", "success")
+        logSelectorState.files = []
+        logSelectorState.logsLoadedOnce = false
       })
       .catch(err => {
         showSnackbar(`Capture failed: ${err.message}`, "error")
@@ -43,79 +165,11 @@ export function TmuxLog() {
   }
 
   function downloadSessions() {
-    fetch("/api/tmux_log/list")
-      .then(res => {
-        if (!res.ok) {
-          return res.text().then(msg => { throw new Error(msg) })
-        }
-        return res.json()
-      })
-      .then(files => {
-        if (files.length === 0) {
-          showSnackbar("No logs available...", "error")
-          return
-        }
-
-        const choice = prompt(
-          "Enter the number of the log to download:\n" +
-          files.map((f, i) => `${i + 1}. ${f}`).join("\n")
-        )
-
-        const idx = parseInt(choice, 10) - 1
-        if (idx >= 0 && idx < files.length) {
-          window.open(`/api/tmux_log/download/${encodeURIComponent(files[idx])}`, "_blank")
-        } else {
-          showSnackbar("Invalid selection...", "error")
-        }
-      })
-      .catch(err => {
-        showSnackbar(`Failed to fetch logs: ${err.message}`, "error")
-      })
+    state.selectorAction = "download"
   }
 
   function deleteSession() {
-    fetch("/api/tmux_log/list")
-      .then(res => {
-        if (!res.ok) {
-          return res.text().then(msg => { throw new Error(msg) })
-        }
-        return res.json()
-      })
-      .then(files => {
-        if (files.length === 0) {
-          showSnackbar("No logs available...", "error")
-          return
-        }
-
-        const choice = prompt(
-          "Enter the number of the log to delete:\n" +
-          files.map((f, i) => `${i + 1}. ${f}`).join("\n")
-        )
-
-        const idx = parseInt(choice, 10) - 1
-        if (idx >= 0 && idx < files.length) {
-          const filename = files[idx]
-          if (!confirm(`Delete ${filename}?`)) {
-            return
-          }
-
-          fetch(`/api/tmux_log/delete/${encodeURIComponent(filename)}`, { method: "DELETE" })
-            .then(res => {
-              if (!res.ok) {
-                return res.text().then(msg => { throw new Error(msg) })
-              }
-              showSnackbar(`${filename} deleted successfully!`, "success")
-            })
-            .catch(err => {
-              showSnackbar(`Delete failed: ${err.message}`, "error")
-            })
-        } else {
-          showSnackbar("Invalid selection...", "error")
-        }
-      })
-      .catch(err => {
-        showSnackbar(`Delete failed: ${err.message}`, "error")
-      })
+    state.selectorAction = "delete"
   }
 
   function deleteAllSessions() {
@@ -129,6 +183,8 @@ export function TmuxLog() {
           return res.text().then(msg => { throw new Error(msg) })
         }
         showSnackbar("All logs deleted successfully!", "success")
+        logSelectorState.files = []
+        logSelectorState.logsLoadedOnce = false
       })
       .catch(err => {
         showSnackbar(`Delete-all failed: ${err.message}`, "error")
@@ -148,9 +204,18 @@ export function TmuxLog() {
         <button class="tmux-control-button" @click="${captureLog}">💾 Capture Log</button>
         <button class="tmux-control-button" @click="${deleteSession}">🗑️ Delete Log</button>
         <button class="tmux-control-button" @click="${deleteAllSessions}">🧨 Delete All Logs</button>
-        <button class="tmux-control-button" @click="${downloadSessions}">⬇️ Download Logs</button>
+        <button class="tmux-control-button" @click="${downloadSessions}">⬇️ Download Log</button>
         <button class="tmux-control-button" @click="${togglePause}">${() => state.paused ? "▶️ Resume Log" : "⏸️ Pause Log"}</button>
+        <button class="tmux-control-button" @click="${() => state.selectorAction = 'rename'}">✏️ Rename Log</button>
       </div>
+
+      ${() => state.selectorAction
+        ? TmuxLogSelector({
+            action: state.selectorAction,
+            closeFn: () => (state.selectorAction = null)
+          })
+        : ""
+      }
     </div>
   `
 }

@@ -42,6 +42,7 @@
   border: var(--border-width-thin) solid var(--sidebar-border-color);
   border-radius: var(--border-width-thick);
   color: var(--main-fg);
+  position: relative;
   text-decoration: none;
   width: var(--width-md);
 }
@@ -124,4 +125,59 @@ video {
   height: var(--border-radius-xl);
   margin-top: calc(0.125rem - 0.5rem);
   width: var(--border-radius-xl);
+}
+
+.recording-card {
+  position: relative;
+}
+
+.preserved-icon {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  cursor: pointer;
+  color: white;
+  font-size: 1.5rem;
+  text-shadow: 0 0 5px black;
+}
+
+.preserved-icon .bi-heart-fill {
+  color: red;
+}
+
+.preserved-icon .bi-heart:hover {
+  color: red;
+}
+
+.preserved-icon .bi-heart-fill:hover {
+  color: white;
+}
+
+.show-preserved-button {
+  background-color: var(--input-bg);
+  border: none;
+  border-radius: var(--border-radius-lg);
+  color: var(--text-color);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-demi-bold);
+  margin-top: var(--margin-sm);
+  padding: var(--padding-sm) var(--padding-base);
+  text-align: center;
+  transition:
+    background-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
+  width: auto;
+}
+
+.show-preserved-button:hover {
+  background-color: var(--success-hover-bg);
+  box-shadow: var(--shadow-md);
+  transform: var(--hover-scale-sm);
+}
+
+.show-preserved-button[disabled] {
+  cursor: not-allowed;
+  opacity: var(--disabled-opacity);
 }

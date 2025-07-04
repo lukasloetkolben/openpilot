@@ -114,7 +114,7 @@ def set_tag(key: str, value: str) -> None:
 
 def save_exception(exc_text: str) -> None:
   files = [
-    ERROR_LOGS_PATH / datetime.now().strftime("%Y-%m-%d--%H-%M-%S.log"),
+    ERROR_LOGS_PATH / datetime.now().astimezone().strftime("%Y-%m-%d--%H-%M-%S.log"),
     ERROR_LOGS_PATH / "error.txt"
   ]
 
