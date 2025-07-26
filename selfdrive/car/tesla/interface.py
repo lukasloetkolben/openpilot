@@ -11,11 +11,6 @@ class CarInterface(CarInterfaceBase):
   def _get_params(ret, candidate, fingerprint, car_fw, experimental_long, docs, frogpilot_toggles):
     ret.carName = "tesla"
 
-    # There is no safe way to do steer blending with user torque,
-    # so the steering behaves like autopilot. This is not
-    # how openpilot should be, hence dashcamOnly
-    ret.dashcamOnly = True
-
     ret.steerControlType = car.CarParams.SteerControlType.angle
 
     ret.longitudinalActuatorDelay = 0.5 # s
