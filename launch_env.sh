@@ -11,5 +11,3 @@ if [ -z "$AGNOS_VERSION" ]; then
 fi
 
 export STAGING_ROOT="/data/safe_staging"
-export SKIP_FW_QUERY="1"
-export FINGERPRINT="MG_5_EV"
