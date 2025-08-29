@@ -8,10 +8,6 @@
         <translation>关闭</translation>
     </message>
     <message>
-        <source>Snooze Update</source>
-        <translation>暂停更新</translation>
-    </message>
-    <message>
         <source>Reboot and Update</source>
         <translation>重启并更新</translation>
     </message>
@@ -40,7 +36,7 @@
     </message>
     <message>
         <source>IP Address</source>
-        <translation>IP地址</translation>
+        <translation>IP 地址</translation>
     </message>
     <message>
         <source>Enable Roaming</source>
@@ -48,11 +44,11 @@
     </message>
     <message>
         <source>APN Setting</source>
-        <translation>APN设置</translation>
+        <translation>APN 设置</translation>
     </message>
     <message>
         <source>Enter APN</source>
-        <translation>输入APN</translation>
+        <translation>输入 APN</translation>
     </message>
     <message>
         <source>leave blank for automatic configuration</source>
@@ -84,27 +80,27 @@
     </message>
     <message>
         <source>Prevent large data uploads when on a metered cellular connection</source>
-        <translation type="unfinished"></translation>
+        <translation>在按流量计费的移动网络上，防止上传大数据</translation>
     </message>
     <message>
         <source>default</source>
-        <translation type="unfinished"></translation>
+        <translation>默认</translation>
     </message>
     <message>
         <source>metered</source>
-        <translation type="unfinished"></translation>
+        <translation>按流量计费</translation>
     </message>
     <message>
         <source>unmetered</source>
-        <translation type="unfinished"></translation>
+        <translation>不按流量计费</translation>
     </message>
     <message>
         <source>Wi-Fi Network Metered</source>
-        <translation type="unfinished"></translation>
+        <translation>按流量计费的 WLAN 网络</translation>
     </message>
     <message>
         <source>Prevent large data uploads when on a metered Wi-Fi connection</source>
-        <translation type="unfinished"></translation>
+        <translation>在按流量计费的 WLAN 网络上，防止上传大数据</translation>
     </message>
 </context>
 <context>
@@ -247,10 +243,6 @@
         <translation>关机</translation>
     </message>
     <message>
-        <source>openpilot requires the device to be mounted within 4° left or right and within 5° up or 9° down. openpilot is continuously calibrating, resetting is rarely required.</source>
-        <translation>openpilot要求设备安装的偏航角在左4°和右4°之间，俯仰角在上5°和下9°之间。一般来说，openpilot会持续更新校准，很少需要重置。</translation>
-    </message>
-    <message>
         <source> Your device is pointed %1° %2 and %3° %4.</source>
         <translation> 您的设备校准为%1° %2、%3° %4。</translation>
     </message>
@@ -306,6 +298,42 @@
         <source>PAIR</source>
         <translation>配对</translation>
     </message>
+    <message>
+        <source>Disengage to Reset Calibration</source>
+        <translation>解除以重置校准</translation>
+    </message>
+    <message>
+        <source>openpilot requires the device to be mounted within 4° left or right and within 5° up or 9° down.</source>
+        <translation>openpilot 要求设备的安装角度：左右偏移需在 4° 以内，上下俯仰角度需在向上 5° 至向下 9° 的范围内。</translation>
+    </message>
+    <message>
+        <source>openpilot is continuously calibrating, resetting is rarely required. Resetting calibration will restart openpilot if the car is powered on.</source>
+        <translation>openpilot 会持续进行校准，因此很少需要重置。如果车辆电源已开启，重置校准会重新启动 openpilot。</translation>
+    </message>
+    <message>
+        <source>
+
+Steering lag calibration is %1% complete.</source>
+        <translation>
+
+转向延迟校准已完成 %1%。</translation>
+    </message>
+    <message>
+        <source>
+
+Steering lag calibration is complete.</source>
+        <translation>
+
+转向延迟校准已完成。</translation>
+    </message>
+    <message>
+        <source> Steering torque response calibration is %1% complete.</source>
+        <translation> 转向扭矩响应校准已完成 %1%。</translation>
+    </message>
+    <message>
+        <source> Steering torque response calibration is complete.</source>
+        <translation> 转向扭矩响应校准已完成。</translation>
+    </message>
 </context>
 <context>
     <name>DriverViewWindow</name>
@@ -328,20 +356,16 @@
 <context>
     <name>FirehosePanel</name>
     <message>
-        <source>🔥 Firehose Mode 🔥</source>
-        <translation>🔥 训练数据上传模式 🔥</translation>
-    </message>
-    <message>
         <source>openpilot learns to drive by watching humans, like you, drive.
 
 Firehose Mode allows you to maximize your training data uploads to improve openpilot&apos;s driving models. More data means bigger models, which means better Experimental Mode.</source>
         <translation>openpilot 通过观察人类驾驶（包括您）来学习如何驾驶。
 
-“训练数据上传模式”允许您最大化上传训练数据，以改进 openpilot 的驾驶模型。更多数据意味着更强大的模型，也就意味着更优秀的“实验模式”。</translation>
+“Firehose 模式”允许您最大化上传训练数据，以改进 openpilot 的驾驶模型。更多数据意味着更强大的模型，也就意味着更优秀的“实验模式”。</translation>
     </message>
     <message>
         <source>Firehose Mode: ACTIVE</source>
-        <translation>训练数据上传模式：激活中</translation>
+        <translation>Firehose 模式：激活中</translation>
     </message>
     <message>
         <source>ACTIVE</source>
@@ -360,6 +384,10 @@ Firehose Mode allows you to maximize your training data uploads to improve openp
     <message>
         <source>&lt;span stylesheet=&apos;font-size: 60px; font-weight: bold; color: #e74c3c;&apos;&gt;INACTIVE&lt;/span&gt;: connect to an unmetered network</source>
         <translation>&lt;span stylesheet=&apos;font-size: 60px; font-weight: bold; color: #e74c3c;&apos;&gt;闲置&lt;/span&gt;：请连接到不限流量的网络</translation>
+    </message>
+    <message>
+        <source>Firehose Mode</source>
+        <translation>Firehose 模式</translation>
     </message>
 </context>
 <context>
@@ -445,16 +473,8 @@ Firehose Mode allows you to maximize your training data uploads to improve openp
         <translation>一个针对您设备的操作系统更新正在后台下载中。当更新准备好安装时，您将收到提示进行更新。</translation>
     </message>
     <message>
-        <source>Device failed to register. It will not connect to or upload to comma.ai servers, and receives no support from comma.ai. If this is an official device, visit https://comma.ai/support.</source>
-        <translation>设备注册失败。它将无法连接或上传至 comma.ai 服务器，并且无法获得 comma.ai 的支持。如果这是一个官方设备，请访问 https://comma.ai/support。</translation>
-    </message>
-    <message>
         <source>NVMe drive not mounted.</source>
         <translation>NVMe固态硬盘未被挂载。</translation>
-    </message>
-    <message>
-        <source>Unsupported NVMe drive detected. Device may draw significantly more power and overheat due to the unsupported NVMe.</source>
-        <translation>检测到不支持的 NVMe 固态硬盘。您的设备因为使用了不支持的 NVMe 固态硬盘可能会消耗更多电力并更易过热。</translation>
     </message>
     <message>
         <source>openpilot was unable to identify your car. Your car is either unsupported or its ECUs are not recognized. Please submit a pull request to add the firmware versions to the proper vehicle. Need help? Join discord.comma.ai.</source>
@@ -467,6 +487,22 @@ Firehose Mode allows you to maximize your training data uploads to improve openp
     <message>
         <source>Device temperature too high. System cooling down before starting. Current internal component temperature: %1</source>
         <translation>设备温度过高。系统正在冷却中，等冷却完毕后才会启动。目前内部组件温度：%1</translation>
+    </message>
+    <message>
+        <source>Device failed to register with the comma.ai backend. It will not connect or upload to comma.ai servers, and receives no support from comma.ai. If this is a device purchased at comma.ai/shop, open a ticket at https://comma.ai/support.</source>
+        <translation>设备未能注册到 comma.ai 后端。该设备将无法连接或上传数据到 comma.ai 服务器，也无法获得 comma.ai 的支持。如果该设备是在 comma.ai/shop 购买的，请访问 https://comma.ai/support 提交工单。</translation>
+    </message>
+    <message>
+        <source>Acknowledge Excessive Actuation</source>
+        <translation>确认过度作动</translation>
+    </message>
+    <message>
+        <source>Snooze Update</source>
+        <translation>推迟更新</translation>
+    </message>
+    <message>
+        <source>openpilot detected excessive %1 actuation on your last drive. Please contact support at https://comma.ai/support and share your device&apos;s Dongle ID for troubleshooting.</source>
+        <translation>openpilot 在您上一次驾驶中，检测到过度的 %1 作动。请访问 https://comma.ai/support 联系客服，并提供您设备的 Dongle ID 以便进行故障排查。</translation>
     </message>
 </context>
 <context>
@@ -613,47 +649,6 @@ Firehose Mode allows you to maximize your training data uploads to improve openp
     </message>
 </context>
 <context>
-    <name>Reset</name>
-    <message>
-        <source>Reset failed. Reboot to try again.</source>
-        <translation>重置失败。 重新启动以重试。</translation>
-    </message>
-    <message>
-        <source>Are you sure you want to reset your device?</source>
-        <translation>您确定要重置您的设备吗？</translation>
-    </message>
-    <message>
-        <source>System Reset</source>
-        <translation>恢复出厂设置</translation>
-    </message>
-    <message>
-        <source>Cancel</source>
-        <translation>取消</translation>
-    </message>
-    <message>
-        <source>Reboot</source>
-        <translation>重启</translation>
-    </message>
-    <message>
-        <source>Confirm</source>
-        <translation>确认</translation>
-    </message>
-    <message>
-        <source>Unable to mount data partition. Partition may be corrupted. Press confirm to erase and reset your device.</source>
-        <translation>无法挂载数据分区。分区可能已经损坏。请确认是否要删除并重新设置。</translation>
-    </message>
-    <message>
-        <source>Resetting device...
-This may take up to a minute.</source>
-        <translation>设备重置中…
-这可能需要一分钟的时间。</translation>
-    </message>
-    <message>
-        <source>System reset triggered. Press confirm to erase all content and settings. Press cancel to resume boot.</source>
-        <translation>系统重置已触发。按下“确认”以清除所有内容和设置，按下“取消”以继续启动。</translation>
-    </message>
-</context>
-<context>
     <name>SettingsWindow</name>
     <message>
         <source>×</source>
@@ -681,102 +676,7 @@ This may take up to a minute.</source>
     </message>
     <message>
         <source>Firehose</source>
-        <translation>训练上传</translation>
-    </message>
-</context>
-<context>
-    <name>Setup</name>
-    <message>
-        <source>WARNING: Low Voltage</source>
-        <translation>警告：低电压</translation>
-    </message>
-    <message>
-        <source>Power your device in a car with a harness or proceed at your own risk.</source>
-        <translation>请使用car harness线束为您的设备供电，或自行承担风险。</translation>
-    </message>
-    <message>
-        <source>Power off</source>
-        <translation>关机</translation>
-    </message>
-    <message>
-        <source>Continue</source>
-        <translation>继续</translation>
-    </message>
-    <message>
-        <source>Getting Started</source>
-        <translation>开始设置</translation>
-    </message>
-    <message>
-        <source>Before we get on the road, let’s finish installation and cover some details.</source>
-        <translation>开始旅程之前，让我们完成安装并介绍一些细节。</translation>
-    </message>
-    <message>
-        <source>Connect to Wi-Fi</source>
-        <translation>连接到WiFi</translation>
-    </message>
-    <message>
-        <source>Back</source>
-        <translation>返回</translation>
-    </message>
-    <message>
-        <source>Continue without Wi-Fi</source>
-        <translation>不连接WiFi并继续</translation>
-    </message>
-    <message>
-        <source>Waiting for internet</source>
-        <translation>等待网络连接</translation>
-    </message>
-    <message>
-        <source>Enter URL</source>
-        <translation>输入网址</translation>
-    </message>
-    <message>
-        <source>for Custom Software</source>
-        <translation>以下载自定义软件</translation>
-    </message>
-    <message>
-        <source>Downloading...</source>
-        <translation>正在下载……</translation>
-    </message>
-    <message>
-        <source>Download Failed</source>
-        <translation>下载失败</translation>
-    </message>
-    <message>
-        <source>Ensure the entered URL is valid, and the device’s internet connection is good.</source>
-        <translation>请确保互联网连接良好且输入的URL有效。</translation>
-    </message>
-    <message>
-        <source>Reboot device</source>
-        <translation>重启设备</translation>
-    </message>
-    <message>
-        <source>Start over</source>
-        <translation>重来</translation>
-    </message>
-    <message>
-        <source>No custom software found at this URL.</source>
-        <translation>在此网址找不到自定义软件。</translation>
-    </message>
-    <message>
-        <source>Something went wrong. Reboot the device.</source>
-        <translation>发生了一些错误。请重新启动您的设备。</translation>
-    </message>
-    <message>
-        <source>Select a language</source>
-        <translation>选择语言</translation>
-    </message>
-    <message>
-        <source>Choose Software to Install</source>
-        <translation>选择要安装的软件</translation>
-    </message>
-    <message>
-        <source>openpilot</source>
-        <translation>openpilot</translation>
-    </message>
-    <message>
-        <source>Custom Software</source>
-        <translation>定制软件</translation>
+        <translation>Firehose</translation>
     </message>
 </context>
 <context>
@@ -1016,10 +916,6 @@ This may take up to a minute.</source>
         <translation>启用openpilot</translation>
     </message>
     <message>
-        <source>Use the openpilot system for adaptive cruise control and lane keep driver assistance. Your attention is required at all times to use this feature. Changing this setting takes effect when the car is powered off.</source>
-        <translation>使用openpilot进行自适应巡航和车道保持辅助。使用此功能时您必须时刻保持注意力。该设置的更改在熄火时生效。</translation>
-    </message>
-    <message>
         <source>Enable Lane Departure Warnings</source>
         <translation>启用车道偏离警告</translation>
     </message>
@@ -1119,40 +1015,33 @@ This may take up to a minute.</source>
         <source>Enable driver monitoring even when openpilot is not engaged.</source>
         <translation>即使在openpilot未激活时也启用驾驶员监控。</translation>
     </message>
-</context>
-<context>
-    <name>Updater</name>
     <message>
-        <source>Update Required</source>
-        <translation>需要更新</translation>
+        <source>Use the openpilot system for adaptive cruise control and lane keep driver assistance. Your attention is required at all times to use this feature.</source>
+        <translation>openpilot 系统提供“自适应巡航”和“车道保持”驾驶辅助功能。使用此功能时，您需要时刻保持专注。</translation>
     </message>
     <message>
-        <source>An operating system update is required. Connect your device to Wi-Fi for the fastest update experience. The download size is approximately 1GB.</source>
-        <translation>操作系统需要更新。请将您的设备连接到WiFi以获取更快的更新体验。下载大小约为1GB。</translation>
+        <source> Changing this setting will restart openpilot if the car is powered on.</source>
+        <translation> 如果车辆已通电，更改此设置将会重新启动 openpilot。</translation>
     </message>
     <message>
-        <source>Connect to Wi-Fi</source>
-        <translation>连接到WiFi</translation>
+        <source>Record and Upload Microphone Audio</source>
+        <translation>录制并上传麦克风音频</translation>
     </message>
     <message>
-        <source>Install</source>
-        <translation>安装</translation>
+        <source>Record and store microphone audio while driving. The audio will be included in the dashcam video in comma connect.</source>
+        <translation>在驾驶时录制并存储麦克风音频。该音频将会包含在 comma connect 的行车记录仪视频中。</translation>
     </message>
     <message>
-        <source>Back</source>
-        <translation>返回</translation>
+        <source>Record Audio Feedback with LKAS button</source>
+        <translation>使用“车道保持”按钮录制音频反馈</translation>
     </message>
     <message>
-        <source>Loading...</source>
-        <translation>正在加载……</translation>
-    </message>
-    <message>
-        <source>Reboot</source>
-        <translation>重启</translation>
-    </message>
-    <message>
-        <source>Update failed</source>
-        <translation>更新失败</translation>
+        <source>Press the LKAS button to record and share driving feedback with the openpilot team. When this toggle is disabled, the button acts as a bookmark button. The event will be highlighted in comma connect and the segment will be preserved on your device&apos;s storage.
+
+Note that this feature is only compatible with select cars.</source>
+        <translation>按下“车道保持”按钮，即可录制并分享驾驶反馈给 openpilot 团队。当此开关禁用时，该按钮将用作书签按钮。该事件将在 comma connect 中高亮显示，且对应的视频片段将被保留在您的设备存储空间中。
+
+请注意，此功能仅兼容部分车型。</translation>
     </message>
 </context>
 <context>
@@ -1167,7 +1056,7 @@ This may take up to a minute.</source>
     </message>
     <message>
         <source>&lt;span style=&apos;font-family: &quot;Noto Color Emoji&quot;;&apos;&gt;🔥&lt;/span&gt; Firehose Mode &lt;span style=&apos;font-family: Noto Color Emoji;&apos;&gt;🔥&lt;/span&gt;</source>
-        <translation>&lt;span style=&apos;font-family: &quot;Noto Color Emoji&quot;;&apos;&gt;🔥&lt;/span&gt; 训练数据上传模式 &lt;span style=&apos;font-family: Noto Color Emoji;&apos;&gt;🔥&lt;/span&gt;</translation>
+        <translation>&lt;span style=&apos;font-family: &quot;Noto Color Emoji&quot;;&apos;&gt;🔥&lt;/span&gt; Firehose 模式 &lt;span style=&apos;font-family: Noto Color Emoji;&apos;&gt;🔥&lt;/span&gt;</translation>
     </message>
 </context>
 <context>

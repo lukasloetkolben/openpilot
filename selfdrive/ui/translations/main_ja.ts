@@ -8,10 +8,6 @@
         <translation>閉じる</translation>
     </message>
     <message>
-        <source>Snooze Update</source>
-        <translation>更新の一時停止</translation>
-    </message>
-    <message>
         <source>Reboot and Update</source>
         <translation>再起動してアップデート</translation>
     </message>
@@ -247,10 +243,6 @@
         <translation>パワーオフ</translation>
     </message>
     <message>
-        <source>openpilot requires the device to be mounted within 4° left or right and within 5° up or 9° down. openpilot is continuously calibrating, resetting is rarely required.</source>
-        <translation>openpilotの本体は左右4°以内、上5°下9°以内の角度で取付ける必要があります。常にキャリブレーションされておりリセットはほとんど必要ありません。</translation>
-    </message>
-    <message>
         <source> Your device is pointed %1° %2 and %3° %4.</source>
         <translation> このデバイスは%2 %1°、%4 %3°の向きに設置されています。</translation>
     </message>
@@ -306,6 +298,42 @@
         <source>PAIR</source>
         <translation>OK</translation>
     </message>
+    <message>
+        <source>Disengage to Reset Calibration</source>
+        <translation>キャリブレーションをリセットするには運転支援を解除して下さい。</translation>
+    </message>
+    <message>
+        <source>openpilot requires the device to be mounted within 4° left or right and within 5° up or 9° down.</source>
+        <translation>openpilotの本体は左右4°以内、上5°下9°以内の角度で取付ける必要があります。</translation>
+    </message>
+    <message>
+        <source>openpilot is continuously calibrating, resetting is rarely required. Resetting calibration will restart openpilot if the car is powered on.</source>
+        <translation>openpilot は継続的にキャリブレーションを行っており、リセットが必要になることはほとんどありません。キャリブレーションをリセットすると、車の電源が入っている場合はopenpilotが再起動します。</translation>
+    </message>
+    <message>
+        <source>
+
+Steering lag calibration is %1% complete.</source>
+        <translation>
+
+ステアリング遅延のキャリブレーションが%1％完了。</translation>
+    </message>
+    <message>
+        <source>
+
+Steering lag calibration is complete.</source>
+        <translation>
+
+ステアリング遅延のキャリブレーション完了。</translation>
+    </message>
+    <message>
+        <source> Steering torque response calibration is %1% complete.</source>
+        <translation>ステアリングトルク応答のキャリブレーションが%1％完了。</translation>
+    </message>
+    <message>
+        <source> Steering torque response calibration is complete.</source>
+        <translation>ステアリングトルク応答のキャリブレーション完了。</translation>
+    </message>
 </context>
 <context>
     <name>DriverViewWindow</name>
@@ -328,16 +356,12 @@
 <context>
     <name>FirehosePanel</name>
     <message>
-        <source>🔥 Firehose Mode 🔥</source>
-        <translation>🔥 Firehoseモード 🔥</translation>
-    </message>
-    <message>
         <source>openpilot learns to drive by watching humans, like you, drive.
 
 Firehose Mode allows you to maximize your training data uploads to improve openpilot&apos;s driving models. More data means bigger models, which means better Experimental Mode.</source>
         <translation>openpilotは人間であるあなたの運転から学び、AI学習します。
 
-Firehoseモードを有効にすると、学習データを最大限アップロードし、openpilotの運転モデルを向上させることができます。より多くのデータはより大きなモデルとなり、Experimentalモードの精度を向上させます。</translation>
+Firehoseモードを有効にすると学習データを最大限アップロードし、openpilotの運転モデルを改善することができます。より多くのデータはより大きなモデルとなり、Experimentalモードの精度を向上させます。</translation>
     </message>
     <message>
         <source>Firehose Mode: ACTIVE</source>
@@ -360,6 +384,10 @@ Firehoseモードを有効にすると、学習データを最大限アップロ
     <message>
         <source>&lt;span stylesheet=&apos;font-size: 60px; font-weight: bold; color: #e74c3c;&apos;&gt;INACTIVE&lt;/span&gt;: connect to an unmetered network</source>
         <translation>&lt;span stylesheet=&apos;font-size: 60px; font-weight: bold; color: #e74c3c;&apos;&gt;動作停止&lt;/span&gt;: 大容量のネットワークに接続してください</translation>
+    </message>
+    <message>
+        <source>Firehose Mode</source>
+        <translation>Firehoseモード</translation>
     </message>
 </context>
 <context>
@@ -445,16 +473,8 @@ Firehoseモードを有効にすると、学習データを最大限アップロ
         <translation>オペレーティングシステムがバックグラウンドでダウンロードされています。インストールの準備が整うと更新を促されます。</translation>
     </message>
     <message>
-        <source>Device failed to register. It will not connect to or upload to comma.ai servers, and receives no support from comma.ai. If this is an official device, visit https://comma.ai/support.</source>
-        <translation>登録に失敗しました。このデバイスはcomma.aiのサーバーに接続したりデータをアップロードしたりできません。またcomma.aiのサポートも受けられません。公式デバイスである場合は https://comma.ai/support に問い合わせて下さい。</translation>
-    </message>
-    <message>
         <source>NVMe drive not mounted.</source>
         <translation>SSDドライブ(NVMe)がマウントされていません。</translation>
-    </message>
-    <message>
-        <source>Unsupported NVMe drive detected. Device may draw significantly more power and overheat due to the unsupported NVMe.</source>
-        <translation>非サポートのSSDドライブ(NVMe)が検出されました。このドライブを使用するとデバイスが多大な電力を消費し過熱する可能性があります。</translation>
     </message>
     <message>
         <source>openpilot was unable to identify your car. Your car is either unsupported or its ECUs are not recognized. Please submit a pull request to add the firmware versions to the proper vehicle. Need help? Join discord.comma.ai.</source>
@@ -467,6 +487,22 @@ Firehoseモードを有効にすると、学習データを最大限アップロ
     <message>
         <source>Device temperature too high. System cooling down before starting. Current internal component temperature: %1</source>
         <translation>デバイスの温度が高すぎるためシステム起動前の冷却中です。現在のデバイス内部温度: %1</translation>
+    </message>
+    <message>
+        <source>Device failed to register with the comma.ai backend. It will not connect or upload to comma.ai servers, and receives no support from comma.ai. If this is a device purchased at comma.ai/shop, open a ticket at https://comma.ai/support.</source>
+        <translation>製品のcomma.aiへの登録に失敗しました。このデバイスはcomma.aiのサーバーに接続したりアップロードを行ったりすることはできず、comma.aiからのサポートも受けられません。もしcomma.ai/shopで購入した場合は、https://comma.ai/support にてサポートチケットをご提出ください。</translation>
+    </message>
+    <message>
+        <source>Acknowledge Excessive Actuation</source>
+        <translation>過剰な作動の検知</translation>
+    </message>
+    <message>
+        <source>Snooze Update</source>
+        <translation>また後で更新する</translation>
+    </message>
+    <message>
+        <source>openpilot detected excessive %1 actuation on your last drive. Please contact support at https://comma.ai/support and share your device&apos;s Dongle ID for troubleshooting.</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -613,47 +649,6 @@ Firehoseモードを有効にすると、学習データを最大限アップロ
     </message>
 </context>
 <context>
-    <name>Reset</name>
-    <message>
-        <source>Reset failed. Reboot to try again.</source>
-        <translation>初期化に失敗しました。再起動後に再試行してください。</translation>
-    </message>
-    <message>
-        <source>Are you sure you want to reset your device?</source>
-        <translation>初期化してもよろしいですか？</translation>
-    </message>
-    <message>
-        <source>System Reset</source>
-        <translation>システムを初期化</translation>
-    </message>
-    <message>
-        <source>Cancel</source>
-        <translation>キャンセル</translation>
-    </message>
-    <message>
-        <source>Reboot</source>
-        <translation>再起動</translation>
-    </message>
-    <message>
-        <source>Confirm</source>
-        <translation>確認</translation>
-    </message>
-    <message>
-        <source>Unable to mount data partition. Partition may be corrupted. Press confirm to erase and reset your device.</source>
-        <translation>Dataパーティションをマウントできません。パーティションが破損している可能性があります。デバイスを消去してリセットしますので確認を押して下さい。</translation>
-    </message>
-    <message>
-        <source>Resetting device...
-This may take up to a minute.</source>
-        <translation>デバイスをリセットしています…
-この処理には最大で1分ほどかかる場合があります。</translation>
-    </message>
-    <message>
-        <source>System reset triggered. Press confirm to erase all content and settings. Press cancel to resume boot.</source>
-        <translation>システムリセットの準備が整いました。すべてのデータと設定を消去するには「確認」を押してください。「キャンセル」を押すとブートを再開します。</translation>
-    </message>
-</context>
-<context>
     <name>SettingsWindow</name>
     <message>
         <source>×</source>
@@ -682,101 +677,6 @@ This may take up to a minute.</source>
     <message>
         <source>Firehose</source>
         <translation>データ学習</translation>
-    </message>
-</context>
-<context>
-    <name>Setup</name>
-    <message>
-        <source>WARNING: Low Voltage</source>
-        <translation>警告：電圧低下</translation>
-    </message>
-    <message>
-        <source>Power your device in a car with a harness or proceed at your own risk.</source>
-        <translation>ハーネスを使って車でデバイスに電源を供給するか、自己責任でこのまま継続して下さい。</translation>
-    </message>
-    <message>
-        <source>Power off</source>
-        <translation>電源を切る</translation>
-    </message>
-    <message>
-        <source>Continue</source>
-        <translation>続ける</translation>
-    </message>
-    <message>
-        <source>Getting Started</source>
-        <translation>はじめに</translation>
-    </message>
-    <message>
-        <source>Before we get on the road, let’s finish installation and cover some details.</source>
-        <translation>出発する前に、インストールを完了させて少し詳細を確認しましょう。</translation>
-    </message>
-    <message>
-        <source>Connect to Wi-Fi</source>
-        <translation>Wi-Fiに接続</translation>
-    </message>
-    <message>
-        <source>Back</source>
-        <translation>戻る</translation>
-    </message>
-    <message>
-        <source>Continue without Wi-Fi</source>
-        <translation>Wi-Fiに接続せずに続行</translation>
-    </message>
-    <message>
-        <source>Waiting for internet</source>
-        <translation>インターネット接続を待機中</translation>
-    </message>
-    <message>
-        <source>Enter URL</source>
-        <translation>URLの入力</translation>
-    </message>
-    <message>
-        <source>for Custom Software</source>
-        <translation>カスタムソフトウェア</translation>
-    </message>
-    <message>
-        <source>Downloading...</source>
-        <translation>ダウンロード中...</translation>
-    </message>
-    <message>
-        <source>Download Failed</source>
-        <translation>ダウンロードに失敗しました</translation>
-    </message>
-    <message>
-        <source>Ensure the entered URL is valid, and the device’s internet connection is good.</source>
-        <translation>入力されたURLが正しいかどうか、インターネットに正常に接続できているかを確認してください。</translation>
-    </message>
-    <message>
-        <source>Reboot device</source>
-        <translation>デバイスを再起動</translation>
-    </message>
-    <message>
-        <source>Start over</source>
-        <translation>やり直す</translation>
-    </message>
-    <message>
-        <source>No custom software found at this URL.</source>
-        <translation>このURLはカスタムソフトウェアではありません。</translation>
-    </message>
-    <message>
-        <source>Something went wrong. Reboot the device.</source>
-        <translation>何かの問題が発生しました。デバイスを再起動してください。</translation>
-    </message>
-    <message>
-        <source>Select a language</source>
-        <translation>言語を選択</translation>
-    </message>
-    <message>
-        <source>Choose Software to Install</source>
-        <translation>インストールするソフトウェアを選択してください。</translation>
-    </message>
-    <message>
-        <source>openpilot</source>
-        <translation>openpilot</translation>
-    </message>
-    <message>
-        <source>Custom Software</source>
-        <translation>カスタムソフトウェア</translation>
     </message>
 </context>
 <context>
@@ -1016,10 +916,6 @@ This may take up to a minute.</source>
         <translation>openpilotを有効化</translation>
     </message>
     <message>
-        <source>Use the openpilot system for adaptive cruise control and lane keep driver assistance. Your attention is required at all times to use this feature. Changing this setting takes effect when the car is powered off.</source>
-        <translation>openpilotによるアダプティブクルーズコントロールとレーンキープアシストを利用します。この機能を利用する際は常に前方への注意が必要です。この設定を変更は車の電源が必要です。</translation>
-    </message>
-    <message>
         <source>Enable Lane Departure Warnings</source>
         <translation>車線逸脱警報の有効化</translation>
     </message>
@@ -1119,40 +1015,31 @@ This may take up to a minute.</source>
         <source>Enable driver monitoring even when openpilot is not engaged.</source>
         <translation>openpilotが作動していない場合でも運転者モニタリングを有効にする。</translation>
     </message>
-</context>
-<context>
-    <name>Updater</name>
     <message>
-        <source>Update Required</source>
-        <translation>アップデートが必要です</translation>
+        <source>Use the openpilot system for adaptive cruise control and lane keep driver assistance. Your attention is required at all times to use this feature.</source>
+        <translation>openpilotシステムを使用してアダプティブクルーズコントロールおよび車線維持支援を行います。システム使用中は常にドライバーが事故を起こさないように注意を払ってください。</translation>
     </message>
     <message>
-        <source>An operating system update is required. Connect your device to Wi-Fi for the fastest update experience. The download size is approximately 1GB.</source>
-        <translation>OSのアップデートが必要です。Wi-Fiに接続してアップデートする事をお勧めします。ダウンロードサイズは約1GBです。</translation>
+        <source> Changing this setting will restart openpilot if the car is powered on.</source>
+        <translation>この設定を変更すると車の電源が入っている場合はopenpilotが再起動します。</translation>
     </message>
     <message>
-        <source>Connect to Wi-Fi</source>
-        <translation>Wi-Fiに接続</translation>
+        <source>Record and Upload Microphone Audio</source>
+        <translation>マイク音声の録音とアップロード</translation>
     </message>
     <message>
-        <source>Install</source>
-        <translation>インストール</translation>
+        <source>Record and store microphone audio while driving. The audio will be included in the dashcam video in comma connect.</source>
+        <translation>運転中にマイク音声を録音・保存します。音声は comma connect のドライブレコーダー映像に含まれます。</translation>
     </message>
     <message>
-        <source>Back</source>
-        <translation>戻る</translation>
+        <source>Record Audio Feedback with LKAS button</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Loading...</source>
-        <translation>読み込み中...</translation>
-    </message>
-    <message>
-        <source>Reboot</source>
-        <translation>再起動</translation>
-    </message>
-    <message>
-        <source>Update failed</source>
-        <translation>更新失敗</translation>
+        <source>Press the LKAS button to record and share driving feedback with the openpilot team. When this toggle is disabled, the button acts as a bookmark button. The event will be highlighted in comma connect and the segment will be preserved on your device&apos;s storage.
+
+Note that this feature is only compatible with select cars.</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
