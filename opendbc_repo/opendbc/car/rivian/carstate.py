@@ -16,6 +16,7 @@ class CarState(CarStateBase):
     self.acm_lka_hba_cmd = None
     self.sccm_wheel_touch = None
     self.vdm_adas_status = None
+    self.acm_longitudinal_request = None
 
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
@@ -48,7 +49,7 @@ class CarState(CarStateBase):
     # Cruise state
     speed = min(int(cp_adas.vl["ACM_tsrCmd"]["ACM_tsrSpdDisClsMain"]), 85)
     self.last_speed = speed if speed != 0 else self.last_speed
-    ret.cruiseState.enabled = cp_cam.vl["ACM_Status"]["ACM_FeatureStatus"] == 1
+    ret.cruiseState.enabled = cp_cam.vl["ACM_Status"]["ACM_FeatureStatus"] in (1, 2, 3, 4)
     # TODO: find cruise set speed on CAN
     ret.cruiseState.speed = self.last_speed * CV.MPH_TO_MS  # detected speed limit
     if not self.CP.openpilotLongitudinalControl:
@@ -91,6 +92,7 @@ class CarState(CarStateBase):
     self.acm_lka_hba_cmd = copy.copy(cp_cam.vl["ACM_lkaHbaCmd"])
     self.sccm_wheel_touch = copy.copy(cp.vl["SCCM_WheelTouch"])
     self.vdm_adas_status = copy.copy(cp.vl["VDM_AdasSts"])
+    self.acm_longitudinal_request = copy.copy(cp_cam.vl["ACM_longitudinalRequest"])
 
     return ret
 
