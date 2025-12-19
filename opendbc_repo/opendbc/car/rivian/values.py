@@ -134,7 +134,7 @@ class CarControllerParams:
     # Add extra tolerance for average banked road since safety doesn't have the roll
     MAX_LATERAL_ACCEL=ISO_LATERAL_ACCEL + (ACCELERATION_DUE_TO_GRAVITY * AVERAGE_ROAD_ROLL),  # ~3.6 m/s^2
     MAX_LATERAL_JERK=3.0 + (ACCELERATION_DUE_TO_GRAVITY * AVERAGE_ROAD_ROLL),  # ~3.6 m/s^3
-    MAX_ANGLE_RATE=5,
+    MAX_ANGLE_RATE=0.7,  # deg/frame at 100Hz
   )
 
   ACCEL_MIN = -3.5  # m/s^2
