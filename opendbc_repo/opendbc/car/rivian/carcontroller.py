@@ -38,7 +38,7 @@ class CarController(CarControllerBase):
     if not CC.enabled:
       acm_status = 0
     else:
-      acm_status = 1 if self.active_frames < 25 else 2
+      acm_status = 1 if self.active_frames < 25 else 4
     can_sends.append(create_acm_status(self.packer, self.frame, acm_status))
 
     if self.frame % 5 == 0:
