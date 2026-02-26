@@ -234,7 +234,7 @@ class Controls(ControlsExt):
       hudControl.leftLaneDepart = self.sm['driverAssistance'].leftLaneDeparture
       hudControl.rightLaneDepart = self.sm['driverAssistance'].rightLaneDeparture
 
-    if self.sm['selfdriveState'].active:
+    if self.get_lat_active(self.sm):
       CO = self.sm['carOutput']
       if (self.CP.steerControlType == car.CarParams.SteerControlType.angle or
           self.CP.steerControlType == car.CarParams.SteerControlType.curvatureDEPRECATED):
