@@ -26,21 +26,21 @@ class ICTogglesLayoutMici(NavScroller):
     force_enable_torque_bar     = BigParamControl("Force Enable Torque Bar", "ForceShowTorqueBar")
     enable_accel_bar            = BigParamControl("Enable Accel Bar", "ShowAccelBar")
     
-   self._scroller.add_widgets([
-     enable_curvature_correction,
-     enable_long_comfort_mode,
-     enable_sl_control,
-     enable_sl_pred_control,
-     enable_sl_pred_sl,
-     enable_sl_pred_curve,
-     force_rhd_bsm,
-     disable_car_steer_alerts,
-     enable_smooth_steer,
-     enable_dark_mode,
-     enable_onroad_screen_timer,
-     force_enable_torque_bar,
-     enable_accel_bar,
-   ])
+    self._scroller.add_widgets([
+      enable_curvature_correction,
+      enable_long_comfort_mode,
+      enable_sl_control,
+      enable_sl_pred_control,
+      enable_sl_pred_sl,
+      enable_sl_pred_curve,
+      force_rhd_bsm,
+      disable_car_steer_alerts,
+      enable_smooth_steer,
+      enable_dark_mode,
+      enable_onroad_screen_timer,
+      force_enable_torque_bar,
+      enable_accel_bar,
+    ])
 
     # Toggle lists
     self._refresh_toggles = (
