@@ -10,7 +10,6 @@ from openpilot.selfdrive.ui.ui_state import ui_state
 class ICTogglesLayoutMici(NavScroller):
   def __init__(self):
     super().__init__()
-    self.set_back_callback(gui_app.pop_widget)
 
     enable_curvature_correction = BigParamControl("VW: Lateral Correction (Recommended)", "EnableCurvatureController")
     enable_long_comfort_mode    = BigParamControl("VW: Longitudinal Comfort Mode", "EnableLongComfortMode")
