@@ -175,7 +175,7 @@ class CarController(CarControllerBase, IntelligentCruiseButtonManagementInterfac
     # "Wechselblinken" means switching between hazards and one sided indicators for every indicator cycle (VW MEB full cycle: 0.8 seconds, 1st normal, 2nd hazards)
     # user input has hgher prio than EA indicating, post cycle handover is done via actual indicator signal if EA would already request
     # signaling indicators for 1 frame to trigger the first non hazard cycle, retrigger after the car signals a fully ended cycle
-    if self.CP.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO):
+    if self.CP.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO) and not (self.CP.flags & VolkswagenFlags.MQB_EVO_GEN2):
       if self.frame % 2 == 0:
         blinker_active = CS.left_blinker_active or CS.right_blinker_active
         left_blinker = CC.leftBlinker if not blinker_active else False
@@ -250,7 +250,7 @@ class CarController(CarControllerBase, IntelligentCruiseButtonManagementInterfac
         if self.frame % self.CCP.AEB_HUD_STEP == 0:
           can_sends.append(self.CCS.create_aeb_hud(self.packer_pt, self.CAN.pt, self.radar_disabled_warning_timer < 600)) # AEB HUD (5 Hz), show deactivation for several seconds
 
-        if self.frame % 4 == 0:
+        if self.frame % 4 == 0 and not (self.CP.flags & VolkswagenFlags.MQB_EVO_GEN2):
           can_sends.append(self.CCS.create_radar_objects(self.packer_pt, self.CAN.pt)) # Radar Objects (25 Hz)
 
     # **** HUD Controls ***************************************************** #
@@ -262,7 +262,7 @@ class CarController(CarControllerBase, IntelligentCruiseButtonManagementInterfac
 
       if self.CP.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO):
         sound_alert = self.CCP.LDW_SOUNDS["Chime"] if hud_alert == self.CCP.LDW_MESSAGES["laneAssistTakeOver"] and not CC.disableCarSteerAlerts else self.CCP.LDW_SOUNDS["None"]
-        can_sends.append(self.CCS.create_lka_hud_control(self.packer_pt, self.CAN.pt, CS.ldw_stock_values, CC.latActive,
+        can_sends.append(self.CCS.create_lka_hud_control(self.packer_pt, self.CAN.pt, self.CP, CS.ldw_stock_values, CC.latActive,
                                                          CS.out.steeringPressed, hud_alert, hud_control, sound_alert))
       else:
         can_sends.append(self.CCS.create_lka_hud_control(self.packer_pt, self.CAN.pt, CS.ldw_stock_values, CC.latActive,
@@ -291,7 +291,7 @@ class CarController(CarControllerBase, IntelligentCruiseButtonManagementInterfac
           
         can_sends.append(self.CCS.create_acc_hud_control(self.packer_pt, self.CAN.pt, acc_hud_status, hud_control.setSpeed * CV.MS_TO_KPH,
                                                          hud_control.leadVisible, hud_control.leadDistanceBars + 1, show_distance_bars,
-                                                         CS.esp_hold_confirmation, distance, gap, fcw_alert, acc_hud_event, speed_limit))
+                                                         CS.esp_hold_confirmation, distance, gap, fcw_alert, acc_hud_event, speed_limit, self.CP))
 
       else:
         lead_distance = 0

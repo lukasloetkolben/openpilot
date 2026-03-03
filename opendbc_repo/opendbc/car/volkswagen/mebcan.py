@@ -83,8 +83,8 @@ def create_blinker_control(packer, bus, ea_hud_stock_values, ea_control_stock_va
   return packer.make_can_msg("EA_02", bus, values)
 
 
-def create_lka_hud_control(packer, bus, ldw_stock_values, lat_active, steering_pressed, hud_alert, hud_control, sound_alert):
-  display_mode = 1 if lat_active else 0 # travel assist style showing yellow lanes when op is active
+def create_lka_hud_control(packer, bus, CP, ldw_stock_values, lat_active, steering_pressed, hud_alert, hud_control, sound_alert):
+  display_mode = 1 if lat_active and not (CP.flags & VolkswagenFlags.MQB_EVO_GEN2) else 0 # travel assist style showing yellow lanes when op is active
   
   values = {}
   if len(ldw_stock_values):
@@ -298,7 +298,7 @@ def get_desired_gap(distance_bars, desired_gap, current_gap_signal):
   return gap
 
 
-def create_acc_hud_control(packer, bus, acc_control, set_speed, lead_visible, distance_bars, show_distance_bars, esp_hold, distance, desired_gap, fcw_alert, acc_event, speed_limit):
+def create_acc_hud_control(packer, bus, acc_control, set_speed, lead_visible, distance_bars, show_distance_bars, esp_hold, distance, desired_gap, fcw_alert, acc_event, speed_limit, CP=None):
 
   values = {
     "ACC_Status_ACC":                acc_control,
@@ -333,9 +333,10 @@ def create_acc_hud_control(packer, bus, acc_control, set_speed, lead_visible, di
     "SET_ME_0X7FFF":                 0x7FFF, # unknown
   }
 
-  return packer.make_can_msg("ACC_19", bus, values)
-  
-  
+  acc_hud_msg = "MEB_ACC_01" if CP is not None and CP.flags & VolkswagenFlags.MQB_EVO_GEN2 else "ACC_19"
+  return packer.make_can_msg(acc_hud_msg, bus, values)
+
+
 def create_aeb_control(packer, bus, CP):
   # default inactive values basically present for every plattform (MEB Gen 1/2, MQBevo Gen 1)
   values = {

@@ -48,7 +48,7 @@ class CarInterface(CarInterfaceBase):
       elif ret.flags & VolkswagenFlags.MQB_EVO:
         safety_configs = [get_safety_config(structs.CarParams.SafetyModel.volkswagenMqbEvo)]
         
-      if ret.flags & VolkswagenFlags.MEB_GEN2:
+      if ret.flags & (VolkswagenFlags.MEB_GEN2 | VolkswagenFlags.MQB_EVO_GEN2):
         safety_configs[0].safetyParam |= VolkswagenSafetyFlags.ALT_CRC_VARIANT_1.value
       
       ret.enableBsm = 0x24C in fingerprint[0]  # MEB_Side_Assist_01
@@ -63,7 +63,8 @@ class CarInterface(CarInterfaceBase):
         ret.networkLocation = NetworkLocation.fwdCamera
 
       if ret.networkLocation == NetworkLocation.gateway:
-        ret.radarUnavailable = False
+        if not (ret.flags & VolkswagenFlags.MQB_EVO_GEN2):
+          ret.radarUnavailable = False
         
       if 0x30B in fingerprint[0]:  # Kombi_01
         ret.flags |= VolkswagenFlags.KOMBI_PRESENT.value

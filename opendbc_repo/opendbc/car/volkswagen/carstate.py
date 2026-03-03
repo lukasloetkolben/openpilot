@@ -288,7 +288,8 @@ class CarState(CarStateBase, MadsCarState):
     # VW Emergency Assist status tracking and mitigation
     self.eps_stock_values = pt_cp.vl["LH_EPS_03"]
     self.klr_stock_values = pt_cp.vl["KLR_01"] if self.CP.flags & VolkswagenFlags.STOCK_KLR_PRESENT else {}
-    ret.carFaultedNonCritical = cam_cp.vl["EA_01"]["EA_Funktionsstatus"] in (3, 4, 5, 6) # emergency assist always present also if not coded
+    if not (self.CP.flags & VolkswagenFlags.MQB_EVO_GEN2):
+      ret.carFaultedNonCritical = cam_cp.vl["EA_01"]["EA_Funktionsstatus"] in (3, 4, 5, 6) # emergency assist always present also if not coded
 
     # Update gas, brakes, and gearshift.
     #ret.gasPressed   = pt_cp.vl["Motor_54"]["Accelerator_Pressure"] > 0 # MQBevo offset is not reliable (fluctuation or different statically in small range)
@@ -336,7 +337,8 @@ class CarState(CarStateBase, MadsCarState):
     if self.CP.pcmCruise:
       # Cruise Control mode; check for distance UI setting from the radar.
       # ECM does not manage this, so do not need to check for openpilot longitudinal
-      ret.cruiseState.nonAdaptive = bool(ext_cp.vl["ACC_19"]["ACC_Limiter_Mode"])
+      acc_msg = "MEB_ACC_01" if self.CP.flags & VolkswagenFlags.MQB_EVO_GEN2 else "ACC_19"
+      ret.cruiseState.nonAdaptive = bool(ext_cp.vl[acc_msg]["ACC_Limiter_Mode"])
     else:
       # Speed limiter mode; ECM faults if we command ACC while not pcmCruise
       ret.cruiseState.nonAdaptive = bool(pt_cp.vl["Motor_51"]["TSK_Limiter_ausgewaehlt"])
@@ -358,13 +360,14 @@ class CarState(CarStateBase, MadsCarState):
     # Update ACC setpoint. When the setpoint is zero or there's an error, the
     # radar sends a set-speed of ~90.69 m/s / 203mph.
     if self.CP.pcmCruise:
-      ret.cruiseState.speed = int(round(ext_cp.vl["ACC_19"]["ACC_Wunschgeschw_02"])) * CV.KPH_TO_MS
+      acc_msg = "MEB_ACC_01" if self.CP.flags & VolkswagenFlags.MQB_EVO_GEN2 else "ACC_19"
+      ret.cruiseState.speed = int(round(ext_cp.vl[acc_msg]["ACC_Wunschgeschw_02"])) * CV.KPH_TO_MS
       if ret.cruiseState.speed > 90:
         ret.cruiseState.speed = 0
 
     # Speed Limit
     raining = pt_cp.vl["RLS_01"]["RS_Regenmenge"] > 0
-    vze_01_values = cam_cp.vl["VZE_04"] # Traffic Sign Recognition
+    vze_01_values = cam_cp.vl["VZE_04"] if not (self.CP.flags & VolkswagenFlags.MQB_EVO_GEN2) else {} # Traffic Sign Recognition
     psd_04_values = main_cp.vl["PSD_04"] if self.CP.flags & VolkswagenFlags.STOCK_PSD_PRESENT else {} # Predicative Street Data
     psd_05_values = main_cp.vl["PSD_05"] if self.CP.flags & VolkswagenFlags.STOCK_PSD_PRESENT else {}
     psd_06_values = main_cp.vl["PSD_06"] if self.CP.flags & VolkswagenFlags.STOCK_PSD_PRESENT else {}
@@ -384,8 +387,12 @@ class CarState(CarStateBase, MadsCarState):
     self.left_blinker_active  = bool(pt_cp.vl["Blinkmodi_02"]["BM_links"])
     self.right_blinker_active = bool(pt_cp.vl["Blinkmodi_02"]["BM_rechts"])
     # turn signal cause (see door logic same schema ["Gateway_72"]["SMLS_01_alt"] is not neccessary -> SMLS_01 seems to always work)
-    ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_stalk(240, pt_cp.vl["SMLS_01"]["BH_Blinker_li"],
-                                                                            pt_cp.vl["SMLS_01"]["BH_Blinker_re"])
+    if self.CP.flags & VolkswagenFlags.MQB_EVO_GEN2:
+      ret.leftBlinker = self.left_blinker_active
+      ret.rightBlinker = self.right_blinker_active
+    else:
+      ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_stalk(240, pt_cp.vl["SMLS_01"]["BH_Blinker_li"],
+                                                                              pt_cp.vl["SMLS_01"]["BH_Blinker_re"])
 
     # detect button configuration
     # for latched main cruise button (or no main button present), there is probably a physical cancel button
@@ -400,8 +407,8 @@ class CarState(CarStateBase, MadsCarState):
     ret.espDisabled = bool(pt_cp.vl["ESP_21"]["ESP_Tastung_passiv"]) # this is also true for ESC Sport mode
     ret.espActive   = bool(pt_cp.vl["ESP_21"]["ESP_Eingriff"])
 
-    self.ea_hud_stock_values = cam_cp.vl["EA_02"]
-    self.ea_control_stock_values = cam_cp.vl["EA_01"]
+    self.ea_hud_stock_values = cam_cp.vl["EA_02"] if not (self.CP.flags & VolkswagenFlags.MQB_EVO_GEN2) else {}
+    self.ea_control_stock_values = cam_cp.vl["EA_01"] if not (self.CP.flags & VolkswagenFlags.MQB_EVO_GEN2) else {}
 
     if self.CP.flags & VolkswagenFlags.MEB:
       ret.fuelGauge = pt_cp.vl["Motor_16"]["MO_Energieinhalt_BMS"]
@@ -552,8 +559,9 @@ class CarState(CarStateBase, MadsCarState):
     pt_messages = [
       # frequency changes too much for the CANParser to figure out
       ("Blinkmodi_02", 1),  # From J519 BCM (sent at 1Hz when no lights active, 50Hz when active)
-      ("SMLS_01", 1),       # From Stalk Controls
     ]
+    if not (CP.flags & VolkswagenFlags.MQB_EVO_GEN2):
+      pt_messages.append(("SMLS_01", 1))  # From Stalk Controls (not present on MQBevo Gen2)
     if CP.networkLocation == NetworkLocation.fwdCamera:
       if not (CP.flags & VolkswagenFlags.DISABLE_RADAR):
         pt_messages.append(("AWV_03", 1)) # Front Collision Detection (1 Hz when inactive, 50 Hz when active)
