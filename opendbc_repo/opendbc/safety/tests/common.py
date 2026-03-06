@@ -1055,7 +1055,8 @@ class SafetyTest(SafetyTestBase):
             if {attr, current_test}.issubset({'TestVolkswagenPqSafety', 'TestVolkswagenPqStockSafety', 'TestVolkswagenPqLongSafety',
                                               'TestVolkswagenMqbSafety', 'TestVolkswagenMqbStockSafety', 'TestVolkswagenMqbLongSafety',
                                               'TestVolkswagenMebSafety', 'TestVolkswagenMebStockSafety', 'TestVolkswagenMebLongSafety', 'TestVolkswagenMebCurvatureSafety',
-                                              'TestVolkswagenMqbEvoStockSafety', 'TestVolkswagenMqbEvoLongSafety'}):
+                                              'TestVolkswagenMqbEvoStockSafety', 'TestVolkswagenMqbEvoLongSafety',
+                                              'TestVolkswagenMqbEvoV1StockSafety'}):
               continue
             if {attr, current_test}.issubset({'TestVolkswagenPqSafety', 'TestVolkswagenPqStockSafety', 'TestVolkswagenPqLongSafety'}):
               continue
