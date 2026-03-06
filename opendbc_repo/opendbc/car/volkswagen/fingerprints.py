@@ -849,6 +849,8 @@ FW_VERSIONS = {
       b'\xf1\x872Q0907572T \xf1\x890383',
     ],
   },
+  CAR.VOLKSWAGEN_TIGUAN_MK3: {
+  },
   CAR.VOLKSWAGEN_TOURAN_MK2: {
     (Ecu.engine, 0x7e0, None): [
       b'\xf1\x8704E906025BE\xf1\x890720',

@@ -4440,6 +4440,17 @@
     ],
     "package": "Adaptive Cruise Control (ACC) & Lane Assist"
   },
+  "Volkswagen Tiguan 2024-25": {
+    "platform": "VOLKSWAGEN_TIGUAN_MK3",
+    "make": "Volkswagen",
+    "brand": "volkswagen",
+    "model": "Tiguan",
+    "year": [
+      "2024",
+      "2025"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
   "Volkswagen Touran 2016-23": {
     "platform": "VOLKSWAGEN_TOURAN_MK2",
     "make": "Volkswagen",

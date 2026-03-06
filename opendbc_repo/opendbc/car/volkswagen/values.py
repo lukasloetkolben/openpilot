@@ -265,6 +265,7 @@ class VolkswagenFlags(IntFlag):
   MEB = 16
   MEB_GEN2 = 128
   MQB_EVO = 256
+  MQB_EVO_V1 = 16384
   MLB = 8
 
 
@@ -312,6 +313,16 @@ class VolkswagenMQBevoPlatformConfig(PlatformConfig):
     self.flags |= VolkswagenFlags.MQB_EVO
     if self.flags & VolkswagenFlags.MQB_EVO_GEN2:
       self.dbc_dict = {Bus.pt: 'vw_mqbevo_2024', Bus.radar: 'vw_mqbevo_2024'}
+
+
+@dataclass
+class VolkswagenMQBevoV1PlatformConfig(PlatformConfig):
+  dbc_dict: DbcDict = field(default_factory=lambda: {Bus.pt: 'vw_mqbevo', Bus.radar: 'vw_mqbevo'})
+  chassis_codes: set[str] = field(default_factory=set)
+  wmis: set[WMI] = field(default_factory=set)
+
+  def init(self):
+    self.flags |= VolkswagenFlags.MQB_EVO_V1
 
 
 @dataclass
@@ -540,6 +551,12 @@ class CAR(Platforms):
     VolkswagenCarSpecs(mass=1715, wheelbase=2.74),
     chassis_codes={"5N", "AD", "AX", "BW"},
     wmis={WMI.VOLKSWAGEN_EUROPE_SUV, WMI.VOLKSWAGEN_MEXICO_SUV},
+  )
+  VOLKSWAGEN_TIGUAN_MK3 = VolkswagenMQBevoV1PlatformConfig(
+    [VWCarDocs("Volkswagen Tiguan 2024-25")],
+    VolkswagenCarSpecs(mass=1715, wheelbase=2.79),
+    chassis_codes={"CS"},
+    wmis={WMI.VOLKSWAGEN_EUROPE_SUV},
   )
   VOLKSWAGEN_TOURAN_MK2 = VolkswagenMQBPlatformConfig(
     [VWCarDocs("Volkswagen Touran 2016-23")],

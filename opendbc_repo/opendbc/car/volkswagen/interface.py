@@ -41,6 +41,32 @@ class CarInterface(CarInterfaceBase):
         
       ret.dashcamOnly = is_release  # Release support needs HCA timeout fix, safety validation
 
+    elif ret.flags & VolkswagenFlags.MQB_EVO_V1:
+      # MQB Evo V1: MQB message IDs + MQBevo curvature steering (e.g. Tiguan MK3)
+      safety_configs = [get_safety_config(structs.CarParams.SafetyModel.volkswagenMqbEvoV1)]
+      ret.enableBsm = 0x30F in fingerprint[0]  # SWA_01
+      ret.steerControlType = structs.CarParams.SteerControlType.curvatureDEPRECATED
+      ret.steerAtStandstill = True
+
+      if 0xAD in fingerprint[0] or docs:  # Getriebe_11
+        ret.transmissionType = TransmissionType.automatic
+      elif 0x187 in fingerprint[0]:  # Motor_EV_01
+        ret.transmissionType = TransmissionType.direct
+      else:
+        ret.transmissionType = TransmissionType.manual
+
+      if any(msg in fingerprint[1] for msg in (0x40, 0x86, 0xB2, 0xFD)):  # Airbag_01, LWI_01, ESP_19, ESP_21
+        ret.networkLocation = NetworkLocation.gateway
+      else:
+        ret.networkLocation = NetworkLocation.fwdCamera
+
+      if 0x25D in fingerprint[0]:  # KLR_01
+        ret.flags |= VolkswagenFlags.STOCK_KLR_PRESENT.value
+
+      if ret.networkLocation == NetworkLocation.fwdCamera:
+        ret.flags |= VolkswagenFlags.DISABLE_RADAR.value
+        safety_configs[0].safetyParam |= VolkswagenSafetyFlags.DISABLE_RADAR.value
+
     elif ret.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO):
       # Set global MEB parameters
       if ret.flags & VolkswagenFlags.MEB:
@@ -126,7 +152,7 @@ class CarInterface(CarInterfaceBase):
     elif ret.flags & VolkswagenFlags.MLB:
       ret.steerActuatorDelay = 0.2
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
-    elif ret.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO):
+    elif ret.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO | VolkswagenFlags.MQB_EVO_V1):
       ret.steerActuatorDelay = 0.3
     else:
       ret.steerActuatorDelay = 0.1
@@ -138,7 +164,7 @@ class CarInterface(CarInterfaceBase):
 
     # Global longitudinal tuning defaults, can be overridden per-vehicle
 
-    if ret.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO):
+    if ret.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO | VolkswagenFlags.MQB_EVO_V1):
       ret.longitudinalActuatorDelay = 0.5
       ret.radarDelay = 0.8
       #ret.longitudinalTuning.kpBP = [0., 5.]
@@ -162,7 +188,7 @@ class CarInterface(CarInterfaceBase):
     ret.pcmCruise = not ret.openpilotLongitudinalControl
     ret.autoResumeSng = ret.minEnableSpeed == -1
 
-    if ret.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO):
+    if ret.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO | VolkswagenFlags.MQB_EVO_V1):
       ret.startingState = True # OP long starting state is used: for very slow start the car can go into error (EPB car shutting down bug)
       ret.startAccel = 0.8
       ret.vEgoStarting = 0.5 # minimum ~0.5 m/s acc starting state is neccessary to not fault the car

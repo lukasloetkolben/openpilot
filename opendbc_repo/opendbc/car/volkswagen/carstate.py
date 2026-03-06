@@ -95,9 +95,12 @@ class CarState(CarStateBase, MadsCarState):
         ret.carFaultedNonCritical = bool(cam_cp.vl["HCA_01"]["EA_Ruckfreigabe"]) or cam_cp.vl["HCA_01"]["EA_ACC_Sollstatus"] > 0  # EA
 
       ret.brake = pt_cp.vl["ESP_05"]["ESP_Bremsdruck"] / 250.0  # FIXME: this is pressure in Bar, not sure what OP expects
-      brake_pedal_pressed = bool(pt_cp.vl["Motor_14"]["MO_Fahrer_bremst"])
       brake_pressure_detected = bool(pt_cp.vl["ESP_05"]["ESP_Fahrer_bremst"])
-      ret.brakePressed = brake_pedal_pressed or brake_pressure_detected
+      if self.CP.flags & VolkswagenFlags.MQB_EVO_V1:
+        ret.brakePressed = brake_pressure_detected
+      else:
+        brake_pedal_pressed = bool(pt_cp.vl["Motor_14"]["MO_Fahrer_bremst"])
+        ret.brakePressed = brake_pedal_pressed or brake_pressure_detected
       ret.parkingBrake = bool(pt_cp.vl["Kombi_01"]["KBI_Handbremse"])  # FIXME: need to include an EPB check as well
 
       ret.doorOpen = any([pt_cp.vl["Gateway_72"]["ZV_FT_offen"],
@@ -124,8 +127,12 @@ class CarState(CarStateBase, MadsCarState):
       ret.cruiseState.speed = ext_cp.vl["ACC_02"]["ACC_Wunschgeschw_02"] * CV.KPH_TO_MS if self.CP.pcmCruise else 0
       ret.accFaulted = pt_cp.vl["TSK_06"]["TSK_Status"] in (6, 7)
 
-      ret.leftBlinker = bool(pt_cp.vl["Blinkmodi_02"]["Comfort_Signal_Left"])
-      ret.rightBlinker = bool(pt_cp.vl["Blinkmodi_02"]["Comfort_Signal_Right"])
+      if self.CP.flags & VolkswagenFlags.MQB_EVO_V1:
+        ret.leftBlinker = bool(pt_cp.vl["Blinkmodi_02"]["BM_links"])
+        ret.rightBlinker = bool(pt_cp.vl["Blinkmodi_02"]["BM_rechts"])
+      else:
+        ret.leftBlinker = bool(pt_cp.vl["Blinkmodi_02"]["Comfort_Signal_Left"])
+        ret.rightBlinker = bool(pt_cp.vl["Blinkmodi_02"]["Comfort_Signal_Right"])
 
     # Shared logic
     ret.vEgoCluster = pt_cp.vl["Kombi_01"]["KBI_angez_Geschw"] * CV.KPH_TO_MS

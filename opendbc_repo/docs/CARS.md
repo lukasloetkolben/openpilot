@@ -31,6 +31,7 @@
 |Audi|Q3 2019-24|Adaptive Cruise Control (ACC) & Lane Assist|[Upstream](#upstream)|
 |Audi|Q5 2017-24|All|[Not compatible](#flexray)|
 |Audi|RS3 2018|Adaptive Cruise Control (ACC) & Lane Assist|[Upstream](#upstream)|
+|Audi|RS3 2026|Adaptive Cruise Control (ACC) & Lane Assist|[Community](#community)|
 |Audi|S3 2015-17|Adaptive Cruise Control (ACC) & Lane Assist|[Upstream](#upstream)|
 |Cadillac|CT6 Non-ACC 2017-18|No Adaptive Cruise Control (Non-ACC)|[Dashcam mode](#dashcam)|
 |Cadillac|XT5 Non-ACC 2018|No Adaptive Cruise Control (Non-ACC)|[Dashcam mode](#dashcam)|
@@ -413,6 +414,7 @@
 |Volkswagen|Teramont X 2021-22|Adaptive Cruise Control (ACC) & Lane Assist|[Upstream](#upstream)|
 |Volkswagen|Tiguan 2018-24|Adaptive Cruise Control (ACC) & Lane Assist|[Upstream](#upstream)|
 |Volkswagen|Tiguan eHybrid 2021-23|Adaptive Cruise Control (ACC) & Lane Assist|[Upstream](#upstream)|
+|Volkswagen|Tiguan 2024-25|Adaptive Cruise Control (ACC) & Lane Assist|[Community](#community)|
 |Volkswagen|Touran 2016-23|Adaptive Cruise Control (ACC) & Lane Assist|[Upstream](#upstream)|
 
 # Types of Support

@@ -28,6 +28,7 @@
 #include "opendbc/safety/modes/psa.h"
 #include "opendbc/safety/modes/hyundai_canfd.h"
 #include "opendbc/safety/modes/volkswagen_meb.h"
+#include "opendbc/safety/modes/volkswagen_mqb_evo_v1.h"
 
 uint32_t GET_BYTES(const CANPacket_t *msg, int start, int len) {
   uint32_t ret = 0U;
@@ -416,6 +417,7 @@ int set_safety_hooks(uint16_t mode, uint16_t param) {
     {SAFETY_HYUNDAI_CANFD, &hyundai_canfd_hooks},
     {SAFETY_VOLKSWAGEN_MEB, &volkswagen_meb_hooks},
 	{SAFETY_VOLKSWAGEN_MQBEVO, &volkswagen_meb_hooks},
+	{SAFETY_VOLKSWAGEN_MQB_EVO_V1, &volkswagen_mqb_evo_v1_hooks},
 #ifdef ALLOW_DEBUG
     {SAFETY_PSA, &psa_hooks},
     {SAFETY_SUBARU_PREGLOBAL, &subaru_preglobal_hooks},
