@@ -108,7 +108,7 @@ class CarControllerParams:
         "laneAssistDeactivTrailer": 5,  # "Lane Assist: no function with trailer"
       }
 
-    elif CP.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO):
+    elif CP.flags & (VolkswagenFlags.MEB | VolkswagenFlags.MQB_EVO | VolkswagenFlags.MQB_EVO_V1):
       self.AEB_CONTROL_STEP        = 100   # AWV_03 message frequency 1Hz
       self.AEB_HUD_STEP            = 20    # MEB_AWV_01 message frequency 5Hz
       self.LDW_STEP                = 10    # LDW_02 message frequency 10Hz
@@ -136,7 +136,11 @@ class CarControllerParams:
       else:
         self.shifter_values = can_define.dv["Getriebe_11"]["GE_Fahrstufe"]
       
-      self.hca_status_values = can_define.dv["QFK_01"]["LatCon_HCA_Status"]
+      if CP.flags & VolkswagenFlags.MQB_EVO_V1:
+        # V1 has no QFK_01, uses LH_EPS_03 like MQB
+        self.hca_status_values = can_define.dv["LH_EPS_03"]["EPS_HCA_Status"]
+      else:
+        self.hca_status_values = can_define.dv["QFK_01"]["LatCon_HCA_Status"]
 
       BASE_BUTTONS = [
         Button(structs.CarState.ButtonEvent.Type.setCruise, "GRA_ACC_01", "GRA_Tip_Setzen", [1]),
