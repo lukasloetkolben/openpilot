@@ -850,6 +850,11 @@ FW_VERSIONS = {
     ],
   },
   CAR.VOLKSWAGEN_TIGUAN_MK3: {
+    (Ecu.engine, 0x7e0, None): [],
+    (Ecu.transmission, 0x7e1, None): [],
+    (Ecu.srs, 0x715, None): [],
+    (Ecu.eps, 0x712, None): [],
+    (Ecu.fwdRadar, 0x757, None): [],
   },
   CAR.VOLKSWAGEN_TOURAN_MK2: {
     (Ecu.engine, 0x7e0, None): [

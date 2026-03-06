@@ -51,6 +51,7 @@ static void volkswagen_mqb_evo_v1_rx_hook(const CANPacket_t *msg) {
         speed += wheel_speed;
       }
       vehicle_moving = speed > 0;
+      UPDATE_VEHICLE_SPEED((speed / 4) * 0.0075 / 3.6);
     }
 
     // Update driver input torque from LH_EPS_03 (shared MQB/MEB)

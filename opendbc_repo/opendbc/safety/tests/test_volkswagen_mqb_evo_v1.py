@@ -32,9 +32,10 @@ class TestVolkswagenMqbEvoV1SafetyBase(common.CarSafetyTest, common.CurvatureSte
   MAX_POWER_TEST = 50
   SEND_RATE = 0.02
 
-  # Wheel speeds from ESP_19 (MQB style)
-  def _speed_msg(self, speed):
-    values = {"ESP_%s_Radgeschw_02" % s: speed for s in ["HL", "HR", "VL", "VR"]}
+  # Wheel speeds from ESP_19 (MQB style, signal in kph with 0.0075 scale)
+  def _speed_msg(self, speed_mps: float):
+    spd_kph = speed_mps * 3.6
+    values = {"ESP_%s_Radgeschw_02" % s: spd_kph for s in ["HL", "HR", "VL", "VR"]}
     return self.packer.make_can_msg_safety("ESP_19", 0, values)
 
   # Brake pressure from ESP_05 only (no Motor_14 on this platform)
@@ -47,8 +48,16 @@ class TestVolkswagenMqbEvoV1SafetyBase(common.CarSafetyTest, common.CurvatureSte
     values = {"MO_Fahrpedalrohwert_01": gas}
     return self.packer.make_can_msg_safety("Motor_20", 0, values)
 
-  def _vehicle_moving_msg(self, speed):
-    return self._speed_msg(speed)
+  def _vehicle_moving_msg(self, speed_mps: float):
+    return self._speed_msg(speed_mps)
+
+  # No QFK_01 on this platform - curvature meas not available
+  # steer_curvature_cmd_checks_average doesn't use curvature_meas
+  def _curvature_meas_msg(self, curvature):
+    return None
+
+  def test_curvature_measurements(self):
+    pass
 
   # ACC engagement status from TSK_06 (MQB style)
   def _tsk_status_msg(self, enable, main_switch=True):
