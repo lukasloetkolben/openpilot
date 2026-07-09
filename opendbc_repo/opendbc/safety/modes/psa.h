@@ -106,8 +106,7 @@ static bool psa_tx_hook(const CANPacket_t *msg) {
 static safety_config psa_init(uint16_t param) {
   SAFETY_UNUSED(param);
   static const CanMsg PSA_TX_MSGS[] = {
-    // check_relay=false: a car-side ECU sends 0x3F2 even with the relay open
-    {PSA_LANE_KEEP_ASSIST, PSA_MAIN_BUS, 8, .check_relay = false}, // EPS steering
+    // {PSA_LANE_KEEP_ASSIST, PSA_MAIN_BUS, 8, .check_relay = false}, // EPS steering
   };
 
   static RxCheck psa_rx_checks[] = {
