@@ -40,9 +40,11 @@ class CarState(CarStateBase):
     ret.steeringPressed = self.update_steering_pressed(abs(ret.steeringTorque) > CarControllerParams.STEER_DRIVER_ALLOWANCE, 5)
     self.eps_active = cp.vl['IS_DAT_DIRA']['EPS_STATE_LKA'] == 3 # 0: Unauthorized, 1: Authorized, 2: Available, 3: Active, 4: Defect
 
-    # cruise: no ACC on this car, use the stock LKA STATUS as engaged state
+    # cruise: no ACC on this car, use the stock LKA STATUS as engaged state.
+    # 3: AUTHORIZED (driver pressed LKA, waiting for valid lane), 4: ACTIVE (ECU steering).
+    # Engage on 3 so we feed tracked lanes, which lets the ECU advance to 4.
     ret.cruiseState.available = True
-    ret.cruiseState.enabled = cp.vl['LANE_KEEP_ASSIST']['STATUS'] == 4  # 4: ACTIVE
+    ret.cruiseState.enabled = cp.vl['LANE_KEEP_ASSIST']['STATUS'] in (3, 4)
 
     # gear
     if bool(cp.vl['Dat_BSI']['P103_Com_bRevGear']):

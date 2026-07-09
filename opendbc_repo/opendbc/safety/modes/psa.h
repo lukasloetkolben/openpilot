@@ -82,7 +82,8 @@ static void psa_rx_hook(const CANPacket_t *msg) {
       brake_pressed = (msg->data[0U] >> 5U) & 1U; // P013_MainBrake
     }
     if (msg->addr == PSA_LANE_KEEP_ASSIST) {
-      pcm_cruise_check(((msg->data[4] >> 2) & 0x7U) == 4U); // STATUS == 4 (ACTIVE)
+      unsigned int status = (msg->data[4] >> 2) & 0x7U;
+      pcm_cruise_check((status == 3U) || (status == 4U)); // 3: AUTHORIZED, 4: ACTIVE
     }
   }
 }

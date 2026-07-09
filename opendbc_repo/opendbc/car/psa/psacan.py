@@ -29,7 +29,7 @@ def create_lane_messages(packer, lat_active: bool, apply_curvature: float):
       'LINE_HEADING': 0,
       'LINE_CURVATURE_RATE': 0,
       'LINE_CURVATURE': -apply_curvature if lat_active else 0.,
-      'LINE_QUALITY': 3,
+      'LINE_QUALITY': 2,  # matches camera value seen during stock engagement
       'LINE_VALID': 1,
       'LINE_TRACKED': int(lat_active),
       'LINE_LATERAL_POSITION': lat_pos,
