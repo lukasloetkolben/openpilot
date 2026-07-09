@@ -63,9 +63,9 @@ static void psa_rx_hook(const CANPacket_t *msg) {
     if (msg->addr == PSA_STEERING_ALT) {
       int angle_meas_new = to_signed((msg->data[0] << 8) | msg->data[1], 16); // ANGLE, 0.1 deg
       update_sample(&angle_meas, angle_meas_new);
-      // measured curvature in LINE_CURVATURE CAN units: deg2rad(0.1 * angle / (SR * WB)) * curvature_to_can
-      // SR * WB ~= 47.7 (fit from stock LKA operation): 0.1 * (pi / 180) / 47.7 * 32787 ~= 1.2
-      update_sample(&curvature_state.meas, ROUND((float)angle_meas_new * 1.2f));
+      // measured curvature in LINE_CURVATURE CAN units: deg2rad(0.1 * angle / (SR * WB)) * curvature_to_can.
+      // Must match carcontroller's current_curvature: 0.1 * (pi / 180) / (17.6 * 2.54) * 32787 = 1.28
+      update_sample(&curvature_state.meas, ROUND((float)angle_meas_new * 1.28f));
     }
     if (msg->addr == PSA_DYN4_FRE) {
       // front wheel speed average as second speed source (0.01 km/h)

@@ -5,14 +5,12 @@ from opendbc.car import Bus
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.psa.psacan import create_lane_messages
 from opendbc.car.psa.values import CarControllerParams
-from opendbc.car.vehicle_model import VehicleModel
 
 
 class CarController(CarControllerBase):
   def __init__(self, dbc_names, CP):
     super().__init__(dbc_names, CP)
     self.packer = CANPacker(dbc_names[Bus.main])
-    self.VM = VehicleModel(CP)
     self.apply_curvature_last = 0.
 
   def update(self, CC, CS, now_nanos):
@@ -24,9 +22,11 @@ class CarController(CarControllerBase):
     if self.frame % CarControllerParams.STEER_STEP == 0:
       apply_curvature = actuators.curvature
 
-      # limit deviation from measured curvature (from steering angle, no yaw rate on CAN)
+      # limit deviation from measured curvature (from steering angle, no yaw rate on CAN).
+      # Must use the exact same linear formula as the safety curvature-error check in psa.h,
+      # otherwise commands at the clamp edge get blocked at speed.
       if CS.out.vEgoRaw > 9:
-        current_curvature = self.VM.calc_curvature(math.radians(CS.out.steeringAngleDeg), CS.out.vEgoRaw, 0.)
+        current_curvature = math.radians(CS.out.steeringAngleDeg) / (self.CP.steerRatio * self.CP.wheelbase)
         apply_curvature = float(np.clip(apply_curvature, current_curvature - CarControllerParams.CURVATURE_ERROR,
                                         current_curvature + CarControllerParams.CURVATURE_ERROR))
 
