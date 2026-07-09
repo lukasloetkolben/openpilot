@@ -116,38 +116,23 @@ static bool psa_tx_hook(const CANPacket_t *msg) {
   }
 
   // Safety check for the lane lines. openpilot re-emits the real camera lanes and overrides only
-  // LINE_CURVATURE, so heading/position/rate pass through and cannot be pinned. We bound the
-  // curvature (openpilot's authority) to a speed-scaled ISO lateral-accel cap plus an absolute cap,
-  // sanity-cap the passed-through heading/position, and require both lines to carry the same
-  // overridden curvature. NOTE: looser than pinning every field - the panda can no longer prove the
-  // non-curvature fields are the real camera's. openpilot rate-limits the curvature in software; the
-  // ECU only steers once the driver authorizes (STATUS 3/4, which gates controls_allowed).
+  // LINE_CURVATURE. When not controls_allowed the frame is a pure camera passthrough (left/right
+  // curvatures differ, heading/position/rate carry real values including SNA) and must pass untouched,
+  // or the ECU loses its lane feed. Only while controls_allowed (driver authorized, openpilot may be
+  // overriding the curvature to the same value on both lines) do we bound the curvature to an absolute
+  // plus speed-scaled ISO lateral-accel cap. NOTE: this is looser than pinning every field - the panda
+  // cannot prove the non-curvature fields are the real camera's - accepted for this experimental setup.
   const int PSA_ABS_CURVATURE = 656;    // 0.02 1/m * 32787
-  const int PSA_MAX_HEADING = 3000;     // ~0.3 rad / 1e-4, sanity cap on passthrough
-  const int PSA_MAX_POSITION = 320;     // ~5 m / 0.015625, sanity cap on passthrough
-  static int psa_left_curvature = 0;
-  static bool psa_left_seen = false;
-
   if ((msg->addr == PSA_LKAS_CAM_LANE_LEFT) || (msg->addr == PSA_LKAS_CAM_LANE_RIGHT)) {
     // LINE_CURVATURE, camera sign convention is opposite of the steering angle
     int curvature = -to_signed(((msg->data[4] << 8) | msg->data[5]) >> 4, 12);
-    int heading = to_signed((msg->data[0] << 8) | msg->data[1], 16);
-    int position = to_signed((msg->data[6] << 2) | (msg->data[7] >> 6), 10);
 
     bool violation = false;
-    violation |= (heading > PSA_MAX_HEADING) || (heading < -PSA_MAX_HEADING);
-    violation |= (position > PSA_MAX_POSITION) || (position < -PSA_MAX_POSITION);
-
-    if (msg->addr == PSA_LKAS_CAM_LANE_LEFT) {
-      // absolute cap plus ISO lateral-accel cap (~3.6 m/s^2, matches the curvature safety limits)
+    if (controls_allowed) {
       const float speed = SAFETY_MAX((vehicle_speed.min / VEHICLE_SPEED_FACTOR), 1.0f);
-      const int max_curvature = ROUND((3.6f / (speed * speed)) * 32787.0f) + 1;
+      const int max_curvature = ROUND((3.6f / (speed * speed)) * 32787.0f) + 1;  // ~3.6 m/s^2 ISO lateral accel
       violation |= (curvature > PSA_ABS_CURVATURE) || (curvature < -PSA_ABS_CURVATURE);
       violation |= (curvature > max_curvature) || (curvature < -max_curvature);
-      psa_left_curvature = curvature;
-      psa_left_seen = true;
-    } else {
-      violation |= !psa_left_seen || (curvature != psa_left_curvature);
     }
 
     if (violation) {
