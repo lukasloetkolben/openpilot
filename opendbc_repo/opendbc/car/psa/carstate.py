@@ -40,14 +40,9 @@ class CarState(CarStateBase):
     ret.steeringPressed = self.update_steering_pressed(abs(ret.steeringTorque) > CarControllerParams.STEER_DRIVER_ALLOWANCE, 5)
     self.eps_active = cp.vl['IS_DAT_DIRA']['EPS_STATE_LKA'] == 3 # 0: Unauthorized, 1: Authorized, 2: Available, 3: Active, 4: Defect
 
-    # cruise
-    # HS2_DAT_MDD_CMD_452, HS2_DYN1_MDD_ETAT_2B6 and HS2_DYN_UCF_MDD_32D are not present on this car (route 077b771458fd542f/00000029)
-    # ret.cruiseState.speed = cp_adas.vl['HS2_DAT_MDD_CMD_452']['SPEED_SETPOINT'] * CV.KPH_TO_MS # set to 255 when ACC is off, -2 kph offset from dash speed
-    # ret.cruiseState.enabled = cp_adas.vl['HS2_DAT_MDD_CMD_452']['RVV_ACC_ACTIVATION_REQ'] == 1
-    # ret.cruiseState.available = cp_adas.vl['HS2_DYN1_MDD_ETAT_2B6']['ACC_STATUS'] > 2
-    # ret.cruiseState.nonAdaptive = cp_adas.vl['HS2_DAT_MDD_CMD_452']['LONGITUDINAL_REGULATION_TYPE'] != 3 # 0: None, 1: CC, 2: Limiter, 3: ACC
-    # ret.cruiseState.standstill = bool(cp_adas.vl['HS2_DYN_UCF_MDD_32D']['VEHICLE_STANDSTILL'])
-    # ret.accFaulted = cp_adas.vl['HS2_DYN_UCF_MDD_32D']['ACC_ETAT_DECEL_OR_ESP_STATUS'] == 3 # 0: Inhibited, 1: Waiting, 2: Active, 3: Fault
+    # cruise: no ACC on this car, use the stock LKA STATUS as engaged state
+    ret.cruiseState.available = True
+    ret.cruiseState.enabled = cp.vl['LANE_KEEP_ASSIST']['STATUS'] == 4  # 4: ACTIVE
 
     # gear
     if bool(cp.vl['Dat_BSI']['P103_Com_bRevGear']):

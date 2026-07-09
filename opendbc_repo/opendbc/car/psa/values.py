@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 
 from opendbc.car.structs import CarParams
 from opendbc.car import Bus, CarSpecs, DbcDict, PlatformConfig, Platforms
-from opendbc.car.lateral import AngleSteeringLimits
+from opendbc.car.lateral import AngleSteeringLimits, CurvatureSteeringLimits
 from opendbc.car.docs_definitions import CarDocs, CarHarness, CarParts
 from opendbc.car.fw_query_definitions import FwQueryConfig, Request, StdQueries
 
@@ -10,13 +10,15 @@ Ecu = CarParams.Ecu
 
 
 class CarControllerParams:
-  STEER_STEP = 1
+  STEER_STEP = 5  # LKAS camera lane messages at 20Hz
 
   ANGLE_LIMITS: AngleSteeringLimits = AngleSteeringLimits(
     390, # deg
     ([0., 5., 25.], [2.5, 1.5, .2]),
     ([0., 5., 25.], [5., 2., .3]),
   )
+  CURVATURE_LIMITS: CurvatureSteeringLimits = CurvatureSteeringLimits(0.02)  # max curvature for lane injection, 1/m
+  CURVATURE_ERROR = 0.002  # max deviation from measured curvature, 1/m
   STEER_DRIVER_ALLOWANCE = 5  # Driver intervention threshold, 0.5 Nm
 
 

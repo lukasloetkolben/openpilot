@@ -307,6 +307,12 @@ BO_ 1010 LANE_KEEP_ASSIST: 8 XXX
  SG_ SET_ANGLE : 55|14@0- (0.1,0) [-90|90] "" XXX
  SG_ unknown4 : 57|1@0+ (1,0) [0|1] "" XXX
 
+BO_ 1035 LKAS_CAM_STATUS: 4 LKAS_CAMERA
+ SG_ UNKNOWN_1 : 7|8@0+ (1,0) [0|255] "" XXX
+ SG_ UNKNOWN_2 : 15|8@0+ (1,0) [0|255] "" XXX
+ SG_ UNKNOWN_3 : 23|8@0+ (1,0) [0|255] "" XXX
+ SG_ UNKNOWN_4 : 31|4@0+ (1,0) [0|15] "" XXX
+
 BO_ 1042 Dat_BSI: 8 BSI___Kombiinstrument
  SG_ P040_MainBrakeFault : 0|1@1+ (1,0) [0|1] "-" Vector__XXX
  SG_ P103_Com_bRevGear : 2|1@1+ (1,0) [0|1] "" Vector__XXX
@@ -320,6 +326,17 @@ BO_ 1042 Dat_BSI: 8 BSI___Kombiinstrument
  SG_ P104_Dspl_stAOHt : 30|2@1+ (1,0) [0|3] "-" CMM___Motor_SG
  SG_ DRIVER_DOOR : 51|1@0+ (1,0) [0|1] "" Vector__XXX
  SG_ PASSENGER_DOOR : 52|1@0+ (1,0) [0|1] "" Vector__XXX
+
+BO_ 1054 LKAS_CAM_41E: 8 LKAS_CAMERA
+
+BO_ 1067 LKAS_CAM_LANE_LEFT: 8 LKAS_CAMERA
+ SG_ LINE_HEADING : 7|16@0- (0.0001,0) [-3.2766|3.2766] "rad" XXX
+ SG_ LINE_CURVATURE_RATE : 23|16@0- (1,0) [-32766|32766] "" XXX
+ SG_ LINE_CURVATURE : 39|12@0- (0.0000305,0) [-0.0625|0.0625] "1/m" XXX
+ SG_ LINE_QUALITY : 43|3@0+ (1,0) [0|7] "" XXX
+ SG_ LINE_VALID : 40|1@0+ (1,0) [0|1] "" XXX
+ SG_ LINE_LATERAL_POSITION : 55|10@0- (0.015625,0) [-8|8] "m" XXX
+ SG_ LINE_TRACKED : 61|1@0+ (1,0) [0|1] "" XXX
 
 BO_ 1069 NEW_MSG_42D: 4 XXX
  SG_ COUNTER : 16|4@1+ (1,0) [0|15] "" XXX
@@ -341,6 +358,17 @@ BO_ 1074 Dat_BSI1: 8 BSI___Kombiinstrument
  SG_ P368_Com_stMnSEVRaw : 48|2@1+ (1,0) [0|3] "" Vector__XXX
  SG_ P367_Com_stCtxJDDRaw : 50|6@1+ (1,0) [0|63] "" Vector__XXX
  SG_ P369_Com_stElecNetRaw : 60|4@1+ (1,0) [0|15] "" Vector__XXX
+
+BO_ 1086 LKAS_CAM_43E: 6 LKAS_CAMERA
+
+BO_ 1099 LKAS_CAM_LANE_RIGHT: 8 LKAS_CAMERA
+ SG_ LINE_HEADING : 7|16@0- (0.0001,0) [-3.2766|3.2766] "rad" XXX
+ SG_ LINE_CURVATURE_RATE : 23|16@0- (1,0) [-32766|32766] "" XXX
+ SG_ LINE_CURVATURE : 39|12@0- (0.0000305,0) [-0.0625|0.0625] "1/m" XXX
+ SG_ LINE_QUALITY : 43|3@0+ (1,0) [0|7] "" XXX
+ SG_ LINE_VALID : 40|1@0+ (1,0) [0|1] "" XXX
+ SG_ LINE_LATERAL_POSITION : 55|10@0- (0.015625,0) [-8|8] "m" XXX
+ SG_ LINE_TRACKED : 61|1@0+ (1,0) [0|1] "" XXX
 
 BO_ 1101 Vroues_ABR: 8 CDS___Fahrdynamikregelung
  SG_ P330_VehV_vWhlRrL : 23|16@0+ (0.01,0) [0|655.34] "km/h" Vector__XXX
@@ -366,6 +394,8 @@ BO_ 1106 HS2_DAT_MDD_CMD_452: 6 BSI
  SG_ COCKPIT_GO_ACC_REQUEST : 45|1@0+ (1,0) [0|1] "" CMF,ARTIV,CMM,UC_FREIN
  SG_ ACC_PROGRAM_MODE : 47|2@0+ (1,0) [0|3] "" CMF,ARTIV,CMM,UC_FREIN
 
+BO_ 1118 LKAS_CAM_45E: 6 LKAS_CAMERA
+
 BO_ 1128 Dyn3_CMM: 6 CMM___Motor_SG
  SG_ P247_Com_stStaFunc : 3|2@1+ (1,0) [0|3] "" Vector__XXX
  SG_ P246_Com_bStaPrt : 5|1@1+ (1,0) [0|1] "" Vector__XXX
@@ -377,6 +407,8 @@ BO_ 1128 Dyn3_CMM: 6 CMM___Motor_SG
  SG_ P347_Alt_uSetPoint : 25|6@0+ (1,0) [0|63] "" Vector__XXX
  SG_ P346_Alt_enumPwrProd : 26|3@1+ (1,0) [0|7] "-" Vector__XXX
  SG_ P408_Com_bRly3CtlReq : 40|1@1+ (1,0) [0|1] "" Vector__XXX
+
+BO_ 1150 LKAS_CAM_47E: 8 LKAS_CAMERA
 
 BO_ 1160 Dat_CMM: 8 CMM___Motor_SG
  SG_ P005_CEngDst_tSens : 0|8@1+ (1,-40) [-40|214] "°C" Vector__XXX
@@ -983,6 +1015,19 @@ CM_ SG_ 3221225472 P252_ImpluseStart "Momentary starting request";
 CM_ SG_ 3221225472 P284_T15CD_stPart_byte6 "ECU electronic state";
 CM_ SG_ 3221225472 P284_T15CD_stPart_byte8 "ECU electronic state";
 CM_ SG_ 3221225472 Reserved_1 "P074  Number of BusOff in driving cycle";
+CM_ BO_ 1035 "LKAS camera status, 20Hz; layout unknown; reverse engineered from route 077b771458fd542f/0000002d";
+CM_ BO_ 1054 "LKAS camera, constant filler in analyzed route; possibly additional lane line or road edge";
+CM_ BO_ 1067 "LKAS camera left lane line, 20Hz; field layout confirmed, physical scales are assumptions from route 077b771458fd542f/0000002d; per-field not-available value is max-1 (32766/2046/510), no counter/checksum";
+CM_ SG_ 1067 LINE_HEADING "assumed lane heading angle (c1), scale ~1e-4 rad/count; near-identical for left/right line";
+CM_ SG_ 1067 LINE_CURVATURE_RATE "assumed curvature rate (c3); scale unknown, noisy, spikes on line reacquisition";
+CM_ SG_ 1067 LINE_CURVATURE "assumed road curvature (c2), scale ~3.05e-5 (1/m)/count; sign opposite to LANE_KEEP_ASSIST SET_ANGLE; near-identical for left/right line";
+CM_ SG_ 1067 LINE_LATERAL_POSITION "assumed lateral distance to line, scale ~1/64 m/count; left ~+1.7m, right ~-1.7m, difference = lane width ~3.4m";
+CM_ SG_ 1067 LINE_QUALITY "values 0-3 observed";
+CM_ SG_ 1067 LINE_TRACKED "0 while line lost, fields go to not-available";
+CM_ BO_ 1086 "LKAS camera, constant filler in analyzed route; possibly additional lane line or road edge";
+CM_ BO_ 1099 "LKAS camera right lane line, 20Hz; same layout and assumptions as LKAS_CAM_LANE_LEFT (1067)";
+CM_ BO_ 1118 "LKAS camera, constant filler in analyzed route; possibly additional lane line or road edge";
+CM_ BO_ 1150 "LKAS camera, constant filler in analyzed route; possibly additional lane line or road edge";
 VAL_ 461 ESP_STATUS 0 "DISABLED" 1 "ENABLED";
 VAL_ 461 ESP_STATUS_INV 0 "ENABLED" 1 "DISABLED";
 VAL_ 694 POTENTIAL_WHEEL_TORQUE_REQUEST 0 "Not requested" 1 "Requested in GMP mode" 2 "Requested in Brake mode" 3 "Not used";
