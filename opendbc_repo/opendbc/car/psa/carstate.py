@@ -9,11 +9,21 @@ TransmissionType = structs.CarParams.TransmissionType
 
 
 class CarState(CarStateBase):
+  def __init__(self, CP):
+    super().__init__(CP)
+    # latest real lane lines from the camera (bus 2), re-emitted to the car with only curvature overridden
+    self.cam_lane_left: dict = {}
+    self.cam_lane_right: dict = {}
+
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.main]
-    cp_adas = can_parsers[Bus.adas]
+    # cp_adas = can_parsers[Bus.adas]  # no known messages on this car yet
     cp_cam = can_parsers[Bus.cam]
     ret = structs.CarState()
+
+    # capture the camera's real lane lines for passthrough (see carcontroller)
+    self.cam_lane_left = dict(cp_cam.vl['LKAS_CAM_LANE_LEFT'])
+    self.cam_lane_right = dict(cp_cam.vl['LKAS_CAM_LANE_RIGHT'])
 
     # car speed
     self.parse_wheel_speeds(ret,

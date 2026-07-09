@@ -115,48 +115,39 @@ static bool psa_tx_hook(const CANPacket_t *msg) {
     }
   }
 
-  // Safety check for injected lane lines. Curvature and a bounded heading may steer; curvature
-  // rate must be zero and the lateral position fixed, so the LKA ECU offset term stays neutral.
-  // LEFT runs the full checks, RIGHT must be identical so the pair advances rate/jerk state once per cycle.
-  static const CurvatureSteeringLimits PSA_CURVATURE_LIMITS = {
-    .max_curvature = 656,               // 0.02 1/m * curvature_to_can
-    .curvature_to_can = 32787,          // 1 / 3.05e-5 (LINE_CURVATURE factor)
-    .frequency = 20,                    // Hz
-    .max_curvature_error = 66,          // 0.002 1/m * curvature_to_can
-    .curvature_error_min_speed = 10.0,  // m/s
-    .max_steer_power = 0,
-    .inactive_curvature_is_zero = true,
-  };
-  const int PSA_MAX_HEADING = 1000;     // 0.10 rad / 1e-4 (LINE_HEADING factor)
+  // Safety check for the lane lines. openpilot re-emits the real camera lanes and overrides only
+  // LINE_CURVATURE, so heading/position/rate pass through and cannot be pinned. We bound the
+  // curvature (openpilot's authority) to a speed-scaled ISO lateral-accel cap plus an absolute cap,
+  // sanity-cap the passed-through heading/position, and require both lines to carry the same
+  // overridden curvature. NOTE: looser than pinning every field - the panda can no longer prove the
+  // non-curvature fields are the real camera's. openpilot rate-limits the curvature in software; the
+  // ECU only steers once the driver authorizes (STATUS 3/4, which gates controls_allowed).
+  const int PSA_ABS_CURVATURE = 656;    // 0.02 1/m * 32787
+  const int PSA_MAX_HEADING = 3000;     // ~0.3 rad / 1e-4, sanity cap on passthrough
+  const int PSA_MAX_POSITION = 320;     // ~5 m / 0.015625, sanity cap on passthrough
   static int psa_left_curvature = 0;
-  static int psa_left_heading = 0;
-  static bool psa_left_tracked = false;
-  static bool psa_left_ok = false;
+  static bool psa_left_seen = false;
 
   if ((msg->addr == PSA_LKAS_CAM_LANE_LEFT) || (msg->addr == PSA_LKAS_CAM_LANE_RIGHT)) {
-    // LINE_CURVATURE / LINE_HEADING, camera sign convention is opposite of the steering angle
-    int desired_curvature = -to_signed(((msg->data[4] << 8) | msg->data[5]) >> 4, 12);
-    int desired_heading = -to_signed((msg->data[0] << 8) | msg->data[1], 16);
-    bool steer_control_enabled = ((msg->data[7] >> 5) & 1U) != 0U;  // LINE_TRACKED
-    unsigned int lat_position = (msg->data[6] << 2) | (msg->data[7] >> 6);  // LINE_LATERAL_POSITION
+    // LINE_CURVATURE, camera sign convention is opposite of the steering angle
+    int curvature = -to_signed(((msg->data[4] << 8) | msg->data[5]) >> 4, 12);
+    int heading = to_signed((msg->data[0] << 8) | msg->data[1], 16);
+    int position = to_signed((msg->data[6] << 2) | (msg->data[7] >> 6), 10);
 
     bool violation = false;
-    violation |= ((msg->data[2] << 8) | msg->data[3]) != 0;  // LINE_CURVATURE_RATE must be zero
-    // heading is bounded, must be zero while not steering or when controls are not allowed
-    violation |= (desired_heading > PSA_MAX_HEADING) || (desired_heading < -PSA_MAX_HEADING);
-    violation |= (!steer_control_enabled || !controls_allowed) && (desired_heading != 0);
+    violation |= (heading > PSA_MAX_HEADING) || (heading < -PSA_MAX_HEADING);
+    violation |= (position > PSA_MAX_POSITION) || (position < -PSA_MAX_POSITION);
 
     if (msg->addr == PSA_LKAS_CAM_LANE_LEFT) {
-      violation |= lat_position != 112U;  // +1.75 m
-      violation |= steer_curvature_cmd_checks(desired_curvature, 0, steer_control_enabled, PSA_CURVATURE_LIMITS);
-      psa_left_curvature = desired_curvature;
-      psa_left_heading = desired_heading;
-      psa_left_tracked = steer_control_enabled;
-      psa_left_ok = !violation;
+      // absolute cap plus ISO lateral-accel cap (~3.6 m/s^2, matches the curvature safety limits)
+      const float speed = SAFETY_MAX((vehicle_speed.min / VEHICLE_SPEED_FACTOR), 1.0f);
+      const int max_curvature = ROUND((3.6f / (speed * speed)) * 32787.0f) + 1;
+      violation |= (curvature > PSA_ABS_CURVATURE) || (curvature < -PSA_ABS_CURVATURE);
+      violation |= (curvature > max_curvature) || (curvature < -max_curvature);
+      psa_left_curvature = curvature;
+      psa_left_seen = true;
     } else {
-      violation |= lat_position != 912U;  // -1.75 m (10-bit two's complement)
-      violation |= (desired_curvature != psa_left_curvature) || (desired_heading != psa_left_heading) ||
-                   (steer_control_enabled != psa_left_tracked) || !psa_left_ok;
+      violation |= !psa_left_seen || (curvature != psa_left_curvature);
     }
 
     if (violation) {

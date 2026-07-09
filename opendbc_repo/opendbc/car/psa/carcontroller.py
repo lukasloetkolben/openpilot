@@ -34,16 +34,9 @@ class CarController(CarControllerBase):
                                                                           0., CC.latActive, CarControllerParams.STEER_STEP)
       self.apply_curvature_last = apply_curvature
 
-      # synthesize a lane heading from the remaining curvature error so the ECU has authority at speed;
-      # decays to zero as the car reaches the commanded curvature (closes the loop the camera normally would).
-      # Bound the error at all speeds: below the 9 m/s clamp gate the raw error is 10-40x larger and would
-      # saturate the heading, over-steering the low-speed regime that already works on curvature alone.
-      heading_err = float(np.clip(apply_curvature - current_curvature,
-                                  -CarControllerParams.CURVATURE_ERROR, CarControllerParams.CURVATURE_ERROR))
-      heading = heading_err * CS.out.vEgoRaw * CarControllerParams.HEADING_LOOKAHEAD
-      heading = float(np.clip(heading, -CarControllerParams.HEADING_MAX, CarControllerParams.HEADING_MAX))
-
-      can_sends.extend(create_lane_messages(self.packer, CC.latActive, apply_curvature, heading))
+      # re-emit the real camera lane lines with only the curvature overridden; the ECU keeps doing
+      # its own lane-centering from the real heading/position, openpilot just biases the curvature
+      can_sends.extend(create_lane_messages(self.packer, CC.latActive, apply_curvature, CS.cam_lane_left, CS.cam_lane_right))
 
     new_actuators = actuators.as_builder()
     new_actuators.curvature = float(self.apply_curvature_last)
