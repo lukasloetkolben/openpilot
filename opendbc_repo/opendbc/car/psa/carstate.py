@@ -11,9 +11,10 @@ TransmissionType = structs.CarParams.TransmissionType
 class CarState(CarStateBase):
   def __init__(self, CP):
     super().__init__(CP)
-    # latest real lane lines from the camera (bus 2), re-emitted to the car with only curvature overridden
+    # latest real lane lines from the camera (bus 2), passed through to the car while disengaged
     self.cam_lane_left: dict = {}
     self.cam_lane_right: dict = {}
+    self.lka_status = 0
 
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.main]
@@ -52,9 +53,10 @@ class CarState(CarStateBase):
 
     # cruise: no ACC on this car, use the stock LKA STATUS as engaged state.
     # 3: AUTHORIZED (driver pressed LKA, waiting for valid lane), 4: ACTIVE (ECU steering).
-    # Engage on 3 so we feed tracked lanes, which lets the ECU advance to 4.
+    # Engage on 3 so we feed the virtual lane, which lets the ECU advance to 4.
+    self.lka_status = cp.vl['LANE_KEEP_ASSIST']['STATUS']
     ret.cruiseState.available = True
-    ret.cruiseState.enabled = cp.vl['LANE_KEEP_ASSIST']['STATUS'] in (3, 4)
+    ret.cruiseState.enabled = self.lka_status in (3, 4)
 
     # gear
     if bool(cp.vl['Dat_BSI']['P103_Com_bRevGear']):

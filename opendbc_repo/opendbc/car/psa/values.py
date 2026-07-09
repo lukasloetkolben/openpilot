@@ -19,6 +19,10 @@ class CarControllerParams:
   )
   CURVATURE_LIMITS: CurvatureSteeringLimits = CurvatureSteeringLimits(0.02)  # max curvature for lane injection, 1/m
   CURVATURE_ERROR = 0.002  # max deviation from measured curvature, 1/m
+  # synthesized lane heading: the LKA ECU steers mostly on LINE_HEADING at speed, so the remaining
+  # curvature error is converted into a heading preview. First-cut values, need on-car tuning.
+  HEADING_LOOKAHEAD = 1.5  # s, heading = curvature error * v * lookahead
+  HEADING_MAX = 0.10  # rad, bound on synthesized heading, must match PSA_MAX_HEADING in safety
   STEER_DRIVER_ALLOWANCE = 5  # Driver intervention threshold, 0.5 Nm
 
 

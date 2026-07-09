@@ -17,8 +17,8 @@ class CarController(CarControllerBase):
     can_sends = []
     actuators = CC.actuators
 
-    # lateral control: inject lane lines into the LKAS camera messages,
-    # the car-side LKA ECU computes the steering angle request from them
+    # lateral control: the car-side LKA ECU computes the steering angle request (LANE_KEEP_ASSIST)
+    # from the lane line messages, so we steer by feeding it a virtual lane (see psacan.py)
     if self.frame % CarControllerParams.STEER_STEP == 0:
       apply_curvature = actuators.curvature
 
@@ -34,9 +34,27 @@ class CarController(CarControllerBase):
                                                                           0., CC.latActive, CarControllerParams.STEER_STEP)
       self.apply_curvature_last = apply_curvature
 
-      # re-emit the real camera lane lines with only the curvature overridden; the ECU keeps doing
-      # its own lane-centering from the real heading/position, openpilot just biases the curvature
-      can_sends.extend(create_lane_messages(self.packer, CC.latActive, apply_curvature, CS.cam_lane_left, CS.cam_lane_right))
+      if CC.enabled:
+        if CC.latActive and CS.lka_status == 4:
+          # ECU is ACTIVE: virtual lane centered on openpilot's desired path. LINE_HEADING is the
+          # ECU's dominant input at speed, so the remaining curvature error is synthesized into a
+          # heading preview; it decays to zero as the car reaches the commanded curvature.
+          curvature = apply_curvature
+          heading = (apply_curvature - current_curvature) * CS.out.vEgoRaw * CarControllerParams.HEADING_LOOKAHEAD
+          heading = float(np.clip(heading, -CarControllerParams.HEADING_MAX, CarControllerParams.HEADING_MAX))
+        else:
+          # activation phase (STATUS 3, or driver override): virtual lane centered on the car's
+          # current motion, so the ECU always sees the ideal picture to advance STATUS 3 -> 4
+          curvature = current_curvature
+          heading = 0.
+        # stay inside the safety TX bounds (absolute cap + speed-scaled lateral accel cap)
+        max_curvature = min(CarControllerParams.CURVATURE_LIMITS.CURVATURE_MAX,
+                            CarControllerParams.CURVATURE_LIMITS.MAX_LATERAL_ACCEL / max(CS.out.vEgoRaw, 1.) ** 2)
+        curvature = float(np.clip(curvature, -max_curvature, max_curvature))
+        can_sends.extend(create_lane_messages(self.packer, True, curvature, heading, CS.cam_lane_left, CS.cam_lane_right))
+      else:
+        # disengaged: pass the real camera lane lines through so the stock system keeps working
+        can_sends.extend(create_lane_messages(self.packer, False, 0., 0., CS.cam_lane_left, CS.cam_lane_right))
 
     new_actuators = actuators.as_builder()
     new_actuators.curvature = float(self.apply_curvature_last)

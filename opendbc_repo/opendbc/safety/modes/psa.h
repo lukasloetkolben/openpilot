@@ -115,17 +115,22 @@ static bool psa_tx_hook(const CANPacket_t *msg) {
     }
   }
 
-  // Safety check for the lane lines. openpilot re-emits the real camera lanes and overrides only
-  // LINE_CURVATURE. When not controls_allowed the frame is a pure camera passthrough (left/right
-  // curvatures differ, heading/position/rate carry real values including SNA) and must pass untouched,
-  // or the ECU loses its lane feed. Only while controls_allowed (driver authorized, openpilot may be
-  // overriding the curvature to the same value on both lines) do we bound the curvature to an absolute
-  // plus speed-scaled ISO lateral-accel cap. NOTE: this is looser than pinning every field - the panda
-  // cannot prove the non-curvature fields are the real camera's - accepted for this experimental setup.
-  const int PSA_ABS_CURVATURE = 656;    // 0.02 1/m * 32787
+  // Safety check for the lane lines. While engaged openpilot replaces the camera lanes with a
+  // virtual lane centered on the car (bounded curvature + synthesized heading); the car-side LKA
+  // ECU computes the steering angle request from it. When not controls_allowed the frame is a pure
+  // camera passthrough (left/right values differ, heading/position/rate carry real values including
+  // SNA) and must pass untouched, or the ECU loses its lane feed. Only while controls_allowed
+  // (driver authorized via the LKA button) do we bound the curvature to an absolute plus
+  // speed-scaled ISO lateral-accel cap, and the heading to a fixed preview bound. NOTE: this is
+  // looser than pinning every field - the panda cannot prove the non-curvature fields are the real
+  // camera's - accepted for this experimental setup.
+  const int PSA_ABS_CURVATURE = 656;  // 0.02 1/m * 32787
+  const int PSA_MAX_HEADING = 1000;   // 0.10 rad * 10000, must match HEADING_MAX in carcontroller
   if ((msg->addr == PSA_LKAS_CAM_LANE_LEFT) || (msg->addr == PSA_LKAS_CAM_LANE_RIGHT)) {
     // LINE_CURVATURE, camera sign convention is opposite of the steering angle
     int curvature = -to_signed(((msg->data[4] << 8) | msg->data[5]) >> 4, 12);
+    // LINE_HEADING, camera sign convention matches the steering angle
+    int heading = to_signed((msg->data[0] << 8) | msg->data[1], 16);
 
     bool violation = false;
     if (controls_allowed) {
@@ -133,6 +138,7 @@ static bool psa_tx_hook(const CANPacket_t *msg) {
       const int max_curvature = ROUND((3.6f / (speed * speed)) * 32787.0f) + 1;  // ~3.6 m/s^2 ISO lateral accel
       violation |= (curvature > PSA_ABS_CURVATURE) || (curvature < -PSA_ABS_CURVATURE);
       violation |= (curvature > max_curvature) || (curvature < -max_curvature);
+      violation |= (heading > PSA_MAX_HEADING) || (heading < -PSA_MAX_HEADING);
     }
 
     if (violation) {
