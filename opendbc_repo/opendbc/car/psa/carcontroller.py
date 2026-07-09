@@ -25,8 +25,8 @@ class CarController(CarControllerBase):
       # limit deviation from measured curvature (from steering angle, no yaw rate on CAN).
       # Must use the exact same linear formula as the safety curvature-error check in psa.h,
       # otherwise commands at the clamp edge get blocked at speed.
+      current_curvature = math.radians(CS.out.steeringAngleDeg) / (self.CP.steerRatio * self.CP.wheelbase)
       if CS.out.vEgoRaw > 9:
-        current_curvature = math.radians(CS.out.steeringAngleDeg) / (self.CP.steerRatio * self.CP.wheelbase)
         apply_curvature = float(np.clip(apply_curvature, current_curvature - CarControllerParams.CURVATURE_ERROR,
                                         current_curvature + CarControllerParams.CURVATURE_ERROR))
 
@@ -34,7 +34,12 @@ class CarController(CarControllerBase):
                                                                           0., CC.latActive, CarControllerParams.STEER_STEP)
       self.apply_curvature_last = apply_curvature
 
-      can_sends.extend(create_lane_messages(self.packer, CC.latActive, apply_curvature))
+      # synthesize a lane heading from the remaining curvature error so the ECU has authority at speed;
+      # decays to zero as the car reaches the commanded curvature (closes the loop the camera normally would)
+      heading = (apply_curvature - current_curvature) * CS.out.vEgoRaw * CarControllerParams.HEADING_LOOKAHEAD
+      heading = float(np.clip(heading, -CarControllerParams.HEADING_MAX, CarControllerParams.HEADING_MAX))
+
+      can_sends.extend(create_lane_messages(self.packer, CC.latActive, apply_curvature, heading))
 
     new_actuators = actuators.as_builder()
     new_actuators.curvature = float(self.apply_curvature_last)
