@@ -12,6 +12,12 @@ void ignition_can_hook(const CANPacket_t *msg) {
   if (msg->bus == 0U) {
     int len = GET_LEN(msg);
 
+    // PSA exception
+    if ((msg->addr == 0x572U) && (len == 8)) {
+      ignition_can = ((msg->data[0] >> 2) & 0x3U) != 0U;
+      ignition_can_cnt = 0U;
+    }
+
     // GM exception
     if ((msg->addr == 0x1F1U) && (len == 8)) {
       // SystemPowerMode (2=Run, 3=Crank Request)
