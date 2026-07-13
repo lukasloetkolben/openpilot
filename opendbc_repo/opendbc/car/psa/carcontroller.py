@@ -39,7 +39,8 @@ class CarController(CarControllerBase):
           # ECU's dominant input at speed, so the remaining curvature error is synthesized into a
           # heading preview; it decays to zero as the car reaches the commanded curvature.
           curvature = apply_curvature
-          heading = (apply_curvature - current_curvature) * CS.out.vEgoRaw * CarControllerParams.HEADING_LOOKAHEAD
+          heading_err = float(np.clip(apply_curvature - current_curvature, -CarControllerParams.HEADING_ERROR, CarControllerParams.HEADING_ERROR))
+          heading = heading_err * CS.out.vEgoRaw * CarControllerParams.HEADING_LOOKAHEAD
           heading = float(np.clip(heading, -CarControllerParams.HEADING_MAX, CarControllerParams.HEADING_MAX))
         else:
           # activation phase (STATUS 3, or driver override): virtual lane centered on the car's
