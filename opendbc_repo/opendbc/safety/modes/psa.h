@@ -126,12 +126,17 @@ static bool psa_tx_hook(const CANPacket_t *msg) {
   // camera's - accepted for this experimental setup.
   const int PSA_ABS_CURVATURE = 656;  // 0.02 1/m * 32787
   const int PSA_MAX_HEADING = 1000;   // 0.10 rad * 10000, must match HEADING_MAX in carcontroller
+  const int PSA_LANE_POS_MIN = 84;    // 1.31 m * 64, virtual line at 1.75 +/- (0.12 equilibrium + 0.30 offset)
+  const int PSA_LANE_POS_MAX = 140;   // 2.19 m * 64
   if ((msg->addr == PSA_LKAS_CAM_LANE_LEFT) || (msg->addr == PSA_LKAS_CAM_LANE_RIGHT)) {
     // LINE_CURVATURE: openpilot deliberately injects the curvature flipped as a yaw-damping
     // term (see psacan.py); negate to get the ISO-signed value (bounds are symmetric anyway)
     int curvature = -to_signed(((msg->data[4] << 8) | msg->data[5]) >> 4, 12);
     // LINE_HEADING, camera sign convention matches the steering angle
     int heading = to_signed((msg->data[0] << 8) | msg->data[1], 16);
+    // LINE_LATERAL_POSITION, + = line left of the car; the virtual lane shifts it by at most
+    // the equilibrium (0.12 m) plus the bounded offset request
+    int lat_pos = to_signed(((msg->data[6] << 8) | msg->data[7]) >> 6, 10);
 
     bool violation = false;
     if (controls_allowed) {
@@ -140,6 +145,11 @@ static bool psa_tx_hook(const CANPacket_t *msg) {
       violation |= (curvature > PSA_ABS_CURVATURE) || (curvature < -PSA_ABS_CURVATURE);
       violation |= (curvature > max_curvature) || (curvature < -max_curvature);
       violation |= (heading > PSA_MAX_HEADING) || (heading < -PSA_MAX_HEADING);
+      if (msg->addr == PSA_LKAS_CAM_LANE_LEFT) {
+        violation |= (lat_pos < PSA_LANE_POS_MIN) || (lat_pos > PSA_LANE_POS_MAX);
+      } else {
+        violation |= (lat_pos < -PSA_LANE_POS_MAX) || (lat_pos > -PSA_LANE_POS_MIN);
+      }
     }
 
     if (violation) {

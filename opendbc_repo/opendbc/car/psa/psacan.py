@@ -18,7 +18,7 @@ def create_lka_steering(packer, lat_active: bool, apply_angle: float, status: in
   return packer.make_can_msg('LANE_KEEP_ASSIST', 0, values)
 
 
-def create_lane_messages(packer, engaged: bool, curvature: float, heading: float, cam_left: dict, cam_right: dict):
+def create_lane_messages(packer, engaged: bool, curvature: float, heading: float, lane_center: float, cam_left: dict, cam_right: dict):
   # The car-side LKA ECU compares the car against these lane lines to compute its steering
   # command (LANE_KEEP_ASSIST). While engaged we replace the camera's lines with a virtual lane
   # centered on the car: the ECU always sees the ideal activation picture (valid, tracked,
@@ -45,7 +45,7 @@ def create_lane_messages(packer, engaged: bool, curvature: float, heading: float
       'LINE_CURVATURE': -curvature,
       'LINE_QUALITY': 2,  # matches camera value seen during stock engagement
       'LINE_VALID': 1,
-      'LINE_LATERAL_POSITION': lat_pos,
+      'LINE_LATERAL_POSITION': lat_pos + lane_center,
       'LINE_TRACKED': 1,
     }
     msgs.append(packer.make_can_msg(name, 0, values))

@@ -30,6 +30,14 @@ class CarControllerParams:
   # curvature error is converted into a heading preview; it decays as the error closes.
   HEADING_LOOKAHEAD = 1.5  # s, heading = curvature error * v * lookahead
   HEADING_MAX = 0.10  # rad, bound on synthesized heading, must match PSA_MAX_HEADING in safety
+  # virtual lane lateral placement. Stock sysid (route 54, hands-off ACTIVE): the ECU's equilibrium
+  # is NOT the geometric center but +0.12 m, and the lateral offset is its STRONGEST input
+  # (~8.5 deg/m, more than heading or curvature). Shifting the virtual lane center by delta makes
+  # the ECU steer toward delta - our only exogenous channel, used to close the curvature error.
+  LANE_CENTER_EQ = 0.12  # m, stock hands-off equilibrium of (pos_left + pos_right) / 2
+  OFFSET_GAIN = 50.  # m^2, lane center shift per 1/m of remaining curvature error
+  OFFSET_MAX = 0.30  # m, bound on the commanded shift, must fit PSA_LANE_POS bounds in safety
+  OFFSET_RATE = 0.015  # m per 20Hz step (0.3 m/s), offsets move slowly in the ECU's world
   STEER_DRIVER_ALLOWANCE = 5  # Driver intervention threshold, 0.5 Nm
 
 

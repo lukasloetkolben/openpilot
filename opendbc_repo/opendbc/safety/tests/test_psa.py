@@ -13,6 +13,8 @@ LKAS_CAM_LANE_RIGHT = 0x44B
 MAX_CURVATURE = 0.02       # 1/m, PSA_ABS_CURVATURE
 MAX_HEADING = 0.10         # rad, PSA_MAX_HEADING
 MAX_LATERAL_ACCEL = 3.6    # m/s^2, speed-scaled curvature cap
+LANE_POS_MIN = 1.31        # m, PSA_LANE_POS_MIN (84 * 1/64)
+LANE_POS_MAX = 2.19        # m, PSA_LANE_POS_MAX (140 * 1/64)
 
 
 class TestPsaSafety(common.CarSafetyTest):
@@ -31,10 +33,13 @@ class TestPsaSafety(common.CarSafetyTest):
     self.safety.set_safety_hooks(CarParams.SafetyModel.psa, 0)
     self.safety.init_tests()
 
-  def _lane_msg(self, name: str, curvature: float, heading: float = 0.0):
+  def _lane_msg(self, name: str, curvature: float, heading: float = 0.0, lat_pos: float | None = None):
+    if lat_pos is None:
+      lat_pos = 1.75 if name == "LKAS_CAM_LANE_LEFT" else -1.75
     values = {
       "LINE_CURVATURE": curvature,
       "LINE_HEADING": heading,
+      "LINE_LATERAL_POSITION": lat_pos,
       "LINE_VALID": 1,
       "LINE_TRACKED": 1,
       "LINE_QUALITY": 2,
@@ -101,6 +106,18 @@ class TestPsaSafety(common.CarSafetyTest):
       for sign in (1, -1):
         self.assertTrue(self._tx(self._lane_msg(name, 0., heading=sign * (MAX_HEADING - 0.01))))
         self.assertFalse(self._tx(self._lane_msg(name, 0., heading=sign * (MAX_HEADING + 0.01))))
+
+  def test_lane_line_position_bounds(self):
+    # the virtual line must stay a plausible lane line on its own side of the car
+    self.safety.set_controls_allowed(True)
+    self._set_speed(5)
+    for name, side in (("LKAS_CAM_LANE_LEFT", 1), ("LKAS_CAM_LANE_RIGHT", -1)):
+      self.assertTrue(self._tx(self._lane_msg(name, 0., lat_pos=side * (LANE_POS_MIN + 0.05))))
+      self.assertTrue(self._tx(self._lane_msg(name, 0., lat_pos=side * (LANE_POS_MAX - 0.05))))
+      self.assertFalse(self._tx(self._lane_msg(name, 0., lat_pos=side * (LANE_POS_MIN - 0.05))))
+      self.assertFalse(self._tx(self._lane_msg(name, 0., lat_pos=side * (LANE_POS_MAX + 0.05))))
+      self.assertFalse(self._tx(self._lane_msg(name, 0., lat_pos=-side * 1.75)))  # wrong side
+      self.assertFalse(self._tx(self._lane_msg(name, 0., lat_pos=0.)))  # line under the car
 
 
 if __name__ == "__main__":
