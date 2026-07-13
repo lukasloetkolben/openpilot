@@ -127,8 +127,9 @@ static bool psa_tx_hook(const CANPacket_t *msg) {
   const int PSA_ABS_CURVATURE = 656;  // 0.02 1/m * 32787
   const int PSA_MAX_HEADING = 1000;   // 0.10 rad * 10000, must match HEADING_MAX in carcontroller
   if ((msg->addr == PSA_LKAS_CAM_LANE_LEFT) || (msg->addr == PSA_LKAS_CAM_LANE_RIGHT)) {
-    // LINE_CURVATURE, camera sign convention matches the steering angle (ISO, + = left)
-    int curvature = to_signed(((msg->data[4] << 8) | msg->data[5]) >> 4, 12);
+    // LINE_CURVATURE: openpilot injects opposite-signed curvature (see psacan.py) - the ECU
+    // steers correctly with the flip per on-car testing, so negate to get the ISO-signed command
+    int curvature = -to_signed(((msg->data[4] << 8) | msg->data[5]) >> 4, 12);
     // LINE_HEADING, camera sign convention matches the steering angle
     int heading = to_signed((msg->data[0] << 8) | msg->data[1], 16);
 
