@@ -24,9 +24,14 @@ class CarControllerParams:
   # "responds strongly but wanders"). The panda still enforces the 0.02 abs cap and the 3.6 m/s^2
   # speed-scaled lateral accel cap (0.009 1/m at 20 m/s), which bound the effective value at speed.
   CURVATURE_ERROR = 0.010
-  # synthesized lane heading: the LKA ECU steers mostly on LINE_HEADING at speed, so the remaining
-  # curvature error is converted into a heading preview. First-cut values, need on-car tuning.
-  HEADING_LOOKAHEAD = 1.5  # s, heading = curvature error * v * lookahead
+  # synthesized lane heading. The camera's LINE_HEADING is the lane angle ~16-21 m ahead, not at the
+  # bumper: on well-tracked frames cam_heading ~ offset + curvature * 18 (route 3c corr 0.97). The
+  # ECU expects heading and curvature to be consistent that way, so the virtual lane mimics it:
+  # heading = learned camera baseline + curvature * preview + correction term.
+  HEADING_PREVIEW_DIST = 18.  # m, heading/curvature consistency distance, from camera fits (16-21 m)
+  HEADING_OFFSET_ALPHA = 0.01  # per 20Hz step (~5 s time constant) low-pass for the camera baseline
+  HEADING_OFFSET_MAX = 0.05  # rad, sanity bound on the learned baseline
+  HEADING_LOOKAHEAD = 1.5  # s, correction term = curvature error * v * lookahead
   HEADING_ERROR = 0.004  # 1/m, separate bound on the error feeding the heading, keeps it off the clamp
   HEADING_MAX = 0.10  # rad, bound on synthesized heading, must match PSA_MAX_HEADING in safety
   STEER_DRIVER_ALLOWANCE = 5  # Driver intervention threshold, 0.5 Nm
