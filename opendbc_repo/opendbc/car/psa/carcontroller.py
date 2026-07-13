@@ -22,12 +22,13 @@ class CarController(CarControllerBase):
     if self.frame % CarControllerParams.STEER_STEP == 0:
       apply_curvature = actuators.curvature
 
-      # limit deviation from measured curvature (from steering angle, no yaw rate on CAN) at ALL
-      # speeds: the old >9 m/s condition left the error unbounded below 32 km/h, where it reached
-      # 0.011 and slammed the synthesized heading into its clamp (jerky steering, route 00000040)
+      # limit deviation from measured curvature (from steering angle, no yaw rate on CAN).
+      # Speed-dependent: near-open at city speed where a tight bound starves the planner
+      # (lateral accel ~ err * v^2), tight at speed where wide bounds destabilize the loop.
       current_curvature = math.radians(CS.out.steeringAngleDeg) / (self.CP.steerRatio * self.CP.wheelbase)
-      apply_curvature = float(np.clip(apply_curvature, current_curvature - CarControllerParams.CURVATURE_ERROR,
-                                      current_curvature + CarControllerParams.CURVATURE_ERROR))
+      curvature_error = float(np.interp(CS.out.vEgoRaw, CarControllerParams.CURVATURE_ERROR_BP, CarControllerParams.CURVATURE_ERROR_V))
+      apply_curvature = float(np.clip(apply_curvature, current_curvature - curvature_error,
+                                      current_curvature + curvature_error))
 
       apply_curvature = CarControllerParams.CURVATURE_LIMITS.apply_limits(apply_curvature, self.apply_curvature_last, CS.out.vEgoRaw,
                                                                           0., CC.latActive, CarControllerParams.STEER_STEP)

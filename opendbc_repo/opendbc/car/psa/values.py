@@ -18,12 +18,14 @@ class CarControllerParams:
     ([0., 5., 25.], [5., 2., .3]),
   )
   CURVATURE_LIMITS: CurvatureSteeringLimits = CurvatureSteeringLimits(0.02)  # max curvature for lane injection, 1/m
-  # max deviation from measured curvature, 1/m. Deliberately tight: it bounds both channels of the
-  # empirically stable P+D structure (heading correction + flipped curvature echo, see psacan.py).
-  # Wider values (0.005/0.010) fed the heading faster than the ECU's ~0.3-0.8 s lag could follow
-  # and destabilized the loop (routes 4f/51). Applies at ALL speeds - the old >9 m/s condition left
-  # the error unbounded below 32 km/h and caused low-speed jerking (route 00000040).
-  CURVATURE_ERROR = 0.002
+  # max deviation from measured curvature, 1/m, speed-dependent. Lateral accel ~ err * v^2, so a
+  # fixed bound that is tight at highway speed starves the planner at city speed: at 28 km/h a
+  # 0.002 bound is 0.13 m/s^2 - route 52 was clamp-limited 67% of ACTIVE time and drifted toward
+  # the road edge. Wide-open at city speed (matching 0bd67c4, the best-driving commit, which
+  # skipped the clamp below 9 m/s entirely), tight above. Wider bounds AT SPEED destabilize the
+  # loop (routes 4f/51) - keep the high-speed end at 0.002.
+  CURVATURE_ERROR_BP = [7., 11.]   # m/s
+  CURVATURE_ERROR_V = [0.02, 0.002]  # 1/m
   # synthesized lane heading: the LKA ECU steers mostly on LINE_HEADING at speed, so the remaining
   # curvature error is converted into a heading preview; it decays as the error closes.
   HEADING_LOOKAHEAD = 1.5  # s, heading = curvature error * v * lookahead
