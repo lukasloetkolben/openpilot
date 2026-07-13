@@ -22,13 +22,12 @@ class CarController(CarControllerBase):
     if self.frame % CarControllerParams.STEER_STEP == 0:
       apply_curvature = actuators.curvature
 
-      # limit deviation from measured curvature (from steering angle, no yaw rate on CAN).
-      # Must use the exact same linear formula as the safety curvature-error check in psa.h,
-      # otherwise commands at the clamp edge get blocked at speed.
+      # limit deviation from measured curvature (from steering angle, no yaw rate on CAN) at ALL
+      # speeds: the old >9 m/s condition left the error unbounded below 32 km/h, where it reached
+      # 0.011 and slammed the synthesized heading into its clamp (jerky steering, route 00000040)
       current_curvature = math.radians(CS.out.steeringAngleDeg) / (self.CP.steerRatio * self.CP.wheelbase)
-      if CS.out.vEgoRaw > 9:
-        apply_curvature = float(np.clip(apply_curvature, current_curvature - CarControllerParams.CURVATURE_ERROR,
-                                        current_curvature + CarControllerParams.CURVATURE_ERROR))
+      apply_curvature = float(np.clip(apply_curvature, current_curvature - CarControllerParams.CURVATURE_ERROR,
+                                      current_curvature + CarControllerParams.CURVATURE_ERROR))
 
       apply_curvature = CarControllerParams.CURVATURE_LIMITS.apply_limits(apply_curvature, self.apply_curvature_last, CS.out.vEgoRaw,
                                                                           0., CC.latActive, CarControllerParams.STEER_STEP)
