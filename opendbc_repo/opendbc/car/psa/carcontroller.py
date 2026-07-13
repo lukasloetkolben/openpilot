@@ -1,7 +1,7 @@
 import math
 import numpy as np
 from opendbc.can.packer import CANPacker
-from opendbc.car import Bus
+from opendbc.car import Bus, DT_CTRL
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.psa.psacan import create_lane_messages
 from opendbc.car.psa.values import CarControllerParams
@@ -13,6 +13,7 @@ class CarController(CarControllerBase):
     self.packer = CANPacker(dbc_names[Bus.main])
     self.apply_curvature_last = 0.
     self.lane_center_last = CarControllerParams.LANE_CENTER_EQ
+    self.offset = 0.  # m, integrated lane-center shift (see values.py: the ECU only steers on changes)
 
   def update(self, CC, CS, now_nanos):
     can_sends = []
@@ -45,29 +46,33 @@ class CarController(CarControllerBase):
           curvature = apply_curvature
           heading = (apply_curvature - current_curvature) * CS.out.vEgoRaw * CarControllerParams.HEADING_LOOKAHEAD
           heading = float(np.clip(heading, -CarControllerParams.HEADING_MAX, CarControllerParams.HEADING_MAX))
-          # lateral offset is the ECU's strongest channel (stock sysid ~8.5 deg/m): shift the lane
-          # center toward the remaining curvature error to request the missing correction
-          offset = (apply_curvature - current_curvature) * CarControllerParams.OFFSET_GAIN
-          offset = float(np.clip(offset, -CarControllerParams.OFFSET_MAX, CarControllerParams.OFFSET_MAX))
+          # integrating offset request: the ECU's response to standing geometry washes out
+          # (route 54 FIR: steady-state gain ~0), only CHANGES steer. While the curvature error
+          # persists the lane center keeps moving, so the ECU keeps steering; the leak bleeds it
+          # back once the error closes so the bounded range stays available.
+          self.offset += (apply_curvature - current_curvature) * CarControllerParams.OFFSET_INT_GAIN * (DT_CTRL * CarControllerParams.STEER_STEP)
+          self.offset = float(np.clip(self.offset * CarControllerParams.OFFSET_LEAK,
+                                      -CarControllerParams.OFFSET_MAX, CarControllerParams.OFFSET_MAX))
         else:
           # activation phase (STATUS 3, or driver override): virtual lane centered on the car's
           # current motion, so the ECU always sees the ideal picture to advance STATUS 3 -> 4
           curvature = current_curvature
           heading = 0.
-          offset = 0.
+          self.offset *= CarControllerParams.OFFSET_LEAK
         # stay inside the safety TX bounds (absolute cap + speed-scaled lateral accel cap)
         max_curvature = min(CarControllerParams.CURVATURE_LIMITS.CURVATURE_MAX,
                             CarControllerParams.CURVATURE_LIMITS.MAX_LATERAL_ACCEL / max(CS.out.vEgoRaw, 1.) ** 2)
         curvature = float(np.clip(curvature, -max_curvature, max_curvature))
-        # lane center: stock equilibrium plus the offset request, slew-limited (in the ECU's world
-        # the car drifts off center slowly; jumps would look like a lost line)
-        lane_center = CarControllerParams.LANE_CENTER_EQ + offset
+        # lane center: stock equilibrium plus the integrated request, slew-limited (in the ECU's
+        # world the car drifts off center slowly; jumps would look like a lost line)
+        lane_center = CarControllerParams.LANE_CENTER_EQ + self.offset
         lane_center = float(np.clip(lane_center, self.lane_center_last - CarControllerParams.OFFSET_RATE,
                                     self.lane_center_last + CarControllerParams.OFFSET_RATE))
         self.lane_center_last = lane_center
         can_sends.extend(create_lane_messages(self.packer, True, curvature, heading, lane_center, CS.cam_lane_left, CS.cam_lane_right))
       else:
         self.lane_center_last = CarControllerParams.LANE_CENTER_EQ
+        self.offset = 0.
         # disengaged: pass the real camera lane lines through so the stock system keeps working
         can_sends.extend(create_lane_messages(self.packer, False, 0., 0., 0., CS.cam_lane_left, CS.cam_lane_right))
 
