@@ -22,9 +22,13 @@ class CarState(CarStateBase):
     cp_cam = can_parsers[Bus.cam]
     ret = structs.CarState()
 
-    # capture the camera's real lane lines for passthrough (see carcontroller)
-    self.cam_lane_left = dict(cp_cam.vl['LKAS_CAM_LANE_LEFT'])
-    self.cam_lane_right = dict(cp_cam.vl['LKAS_CAM_LANE_RIGHT'])
+    # capture the camera's real lane lines for passthrough (see carcontroller). Only update once a
+    # frame has actually been received, so the stored dict stays empty (and nothing is sent) until
+    # the camera is up, instead of forwarding the parser's all-zero defaults.
+    if cp_cam.vl_all['LKAS_CAM_LANE_LEFT']['LINE_VALID']:
+      self.cam_lane_left = dict(cp_cam.vl['LKAS_CAM_LANE_LEFT'])
+    if cp_cam.vl_all['LKAS_CAM_LANE_RIGHT']['LINE_VALID']:
+      self.cam_lane_right = dict(cp_cam.vl['LKAS_CAM_LANE_RIGHT'])
 
     # car speed
     self.parse_wheel_speeds(ret,
@@ -79,5 +83,5 @@ class CarState(CarStateBase):
     return {
       Bus.main: CANParser(DBC[CP.carFingerprint][Bus.pt], [], 0),
       Bus.adas: CANParser(DBC[CP.carFingerprint][Bus.pt], [], 1),
-      Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], 2),
+      Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [('LKAS_CAM_LANE_LEFT', 20), ('LKAS_CAM_LANE_RIGHT', 20)], 2),
     }

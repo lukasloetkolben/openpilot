@@ -25,8 +25,10 @@ def create_lane_messages(packer, engaged: bool, curvature: float, heading: float
   # centered), which lets it advance STATUS 3 (AUTHORIZED) -> 4 (ACTIVE) and then track our
   # geometry instead of the real lane. When disengaged the real camera lines pass through
   # unchanged so the stock system keeps working.
-  # Sign conventions verified on route 0000003c--f13451c457: LINE_CURVATURE is opposite to the
-  # steering angle / openpilot curvature (flip), LINE_HEADING shares the angle sign (no flip).
+  # Sign conventions verified on route 0000003c--f13451c457: LINE_CURVATURE and LINE_HEADING
+  # both share the steering angle / openpilot sign (ISO, + = left), no flips. Verified against
+  # yaw-rate-calibrated steering: cam curvature vs steering curvature slope +0.92, corr peak
+  # at +0.5 s preview; SET_ANGLE = +0.99 * steeringAngleDeg.
   if not engaged:
     return [packer.make_can_msg(name, 0, dict(cam)) for name, cam in
             (('LKAS_CAM_LANE_LEFT', cam_left), ('LKAS_CAM_LANE_RIGHT', cam_right)) if cam]
@@ -36,7 +38,7 @@ def create_lane_messages(packer, engaged: bool, curvature: float, heading: float
     values = {
       'LINE_HEADING': heading,
       'LINE_CURVATURE_RATE': 0,
-      'LINE_CURVATURE': -curvature,
+      'LINE_CURVATURE': curvature,
       'LINE_QUALITY': 2,  # matches camera value seen during stock engagement
       'LINE_VALID': 1,
       'LINE_LATERAL_POSITION': lat_pos,

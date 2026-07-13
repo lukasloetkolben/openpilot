@@ -1019,10 +1019,10 @@ CM_ BO_ 1035 "LKAS camera status, 20Hz; layout unknown; reverse engineered from 
 CM_ BO_ 1054 "LKAS camera, constant filler in analyzed route; possibly additional lane line or road edge";
 CM_ BO_ 1067 "LKAS camera left lane line, 20Hz; field layout confirmed, physical scales are assumptions from route 077b771458fd542f/0000002d; per-field not-available value is max-1 (32766/2046/510), no counter/checksum";
 CM_ SG_ 1067 LINE_HEADING "assumed lane heading angle (c1), scale ~1e-4 rad/count; near-identical for left/right line";
-CM_ SG_ 1067 LINE_CURVATURE_RATE "assumed curvature rate (c3); scale unknown, noisy, spikes on line reacquisition";
-CM_ SG_ 1067 LINE_CURVATURE "assumed road curvature (c2), scale ~3.05e-5 (1/m)/count; sign opposite to LANE_KEEP_ASSIST SET_ANGLE; near-identical for left/right line";
+CM_ SG_ 1067 LINE_CURVATURE_RATE "assumed curvature rate (c3); scale unknown, noisy, spikes on line reacquisition; saturates at 32767 (beyond the 32766 not-available value)";
+CM_ SG_ 1067 LINE_CURVATURE "road curvature (c2), scale ~3.05e-5 (1/m)/count; SAME sign as steering angle / LANE_KEEP_ASSIST SET_ANGLE (ISO, + = left; verified on route 0000003c vs yaw-rate-calibrated steering, slope +0.92 at +0.5s preview); near-identical for left/right line";
 CM_ SG_ 1067 LINE_LATERAL_POSITION "assumed lateral distance to line, scale ~1/64 m/count; left ~+1.7m, right ~-1.7m, difference = lane width ~3.4m";
-CM_ SG_ 1067 LINE_QUALITY "values 0-3 observed";
+CM_ SG_ 1067 LINE_QUALITY "values 0,1,2,3,5 observed";
 CM_ SG_ 1067 LINE_TRACKED "0 while line lost, fields go to not-available";
 CM_ BO_ 1086 "LKAS camera, constant filler in analyzed route; possibly additional lane line or road edge";
 CM_ BO_ 1099 "LKAS camera right lane line, 20Hz; same layout and assumptions as LKAS_CAM_LANE_LEFT (1067)";
