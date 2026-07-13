@@ -25,11 +25,14 @@ def create_lane_messages(packer, engaged: bool, curvature: float, heading: float
   # centered), which lets it advance STATUS 3 (AUTHORIZED) -> 4 (ACTIVE) and then track our
   # geometry instead of the real lane. When disengaged the real camera lines pass through
   # unchanged so the stock system keeps working.
-  # Sign conventions (settled on route 00000040 via ECU response fit): LINE_CURVATURE and
-  # LINE_HEADING both share the steering angle / openpilot sign (ISO, + = left), no flips.
-  # SET_ANGLE-angle = +56 deg/rad * heading + 621 deg/(1/m) * received curvature - the ECU reads
-  # curvature in the camera's convention, so sending -curvature made it fight the heading term
-  # (the earlier "steers correctly with the flip" impression was the dominant heading carrying it).
+  # Sign conventions: the camera's own signals are ISO (+ = left) for BOTH heading and curvature
+  # (log-verified: cam curvature vs steering slope +0.92; ECU response fit +56 deg/rad heading,
+  # +621 deg/(1/m) received curvature). The curvature below is nevertheless sent FLIPPED, on
+  # purpose: since the virtual lane is centered on the car, the sent curvature is inherently an
+  # echo of the car's own state (clamped to current +/- CURVATURE_ERROR). Flipped, that echo
+  # opposes the car's rotation - yaw damping (D-term) - while the same-signed heading correction
+  # steers (P-term). Sending it unflipped (ISO-"correct") makes the echo positive feedback and
+  # the loop wanders or oscillates; verified on-car both ways (routes 40/4d/4f/51).
   if not engaged:
     return [packer.make_can_msg(name, 0, dict(cam)) for name, cam in
             (('LKAS_CAM_LANE_LEFT', cam_left), ('LKAS_CAM_LANE_RIGHT', cam_right)) if cam]
@@ -39,7 +42,7 @@ def create_lane_messages(packer, engaged: bool, curvature: float, heading: float
     values = {
       'LINE_HEADING': heading,
       'LINE_CURVATURE_RATE': 0,
-      'LINE_CURVATURE': curvature,
+      'LINE_CURVATURE': -curvature,
       'LINE_QUALITY': 2,  # matches camera value seen during stock engagement
       'LINE_VALID': 1,
       'LINE_LATERAL_POSITION': lat_pos,
