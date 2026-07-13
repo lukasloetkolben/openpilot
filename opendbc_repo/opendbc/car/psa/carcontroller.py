@@ -13,6 +13,7 @@ class CarController(CarControllerBase):
     self.packer = CANPacker(dbc_names[Bus.main])
     self.apply_curvature_last = 0.
     self.cam_heading_offset = 0.  # rad, learned camera heading baseline (mounting yaw / road crown)
+    self.heading_last = 0.  # rad, for the slew limit on the sent heading
 
   def update(self, CC, CS, now_nanos):
     can_sends = []
@@ -56,6 +57,11 @@ class CarController(CarControllerBase):
         # geometry as contradictory (heading dominates and the curvature request is ignored)
         heading = self.cam_heading_offset + curvature * CarControllerParams.HEADING_PREVIEW_DIST + correction
         heading = float(np.clip(heading, -CarControllerParams.HEADING_MAX, CarControllerParams.HEADING_MAX))
+        # slew limit: the ECU's heading gain is high (~119 deg/rad) with 0.3-0.8 s lag, so fast
+        # clamp-to-clamp heading swings drive a limit cycle; move camera-like smoothly instead
+        heading = float(np.clip(heading, self.heading_last - CarControllerParams.HEADING_RATE,
+                                self.heading_last + CarControllerParams.HEADING_RATE))
+        self.heading_last = heading
         can_sends.extend(create_lane_messages(self.packer, True, curvature, heading, CS.cam_lane_left, CS.cam_lane_right))
       else:
         # learn the camera's heading baseline (mounting yaw / road crown) from well-tracked real
@@ -67,6 +73,9 @@ class CarController(CarControllerBase):
             self.cam_heading_offset += CarControllerParams.HEADING_OFFSET_ALPHA * (target - self.cam_heading_offset)
         self.cam_heading_offset = float(np.clip(self.cam_heading_offset, -CarControllerParams.HEADING_OFFSET_MAX,
                                                 CarControllerParams.HEADING_OFFSET_MAX))
+        # track the would-be heading so engagement starts without a slew-limited jump
+        self.heading_last = float(np.clip(self.cam_heading_offset + current_curvature * CarControllerParams.HEADING_PREVIEW_DIST,
+                                          -CarControllerParams.HEADING_MAX, CarControllerParams.HEADING_MAX))
         # disengaged: pass the real camera lane lines through so the stock system keeps working
         can_sends.extend(create_lane_messages(self.packer, False, 0., 0., CS.cam_lane_left, CS.cam_lane_right))
 
