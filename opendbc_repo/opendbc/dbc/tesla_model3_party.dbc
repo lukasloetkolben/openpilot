@@ -119,6 +119,10 @@ BO_ 373 ESP_wheelSpeeds: 8 CH
  SG_ ESP_wheelSpeedFrR : 13|13@1+ (0.04,0) [0|327.64] "km/h"  das
  SG_ ESP_wheelSpeedFrL : 0|13@1+ (0.04,0) [0|327.64] "km/h"  das
 
+BO_ 1013 NEW_MSG_3F5: 8 XXX
+ SG_ LEFT_BLINKER : 40|1@0+ (1,0) [0|1] "" XXX
+ SG_ RIGHT_BLINKER : 41|1@0+ (1,0) [0|1] "" XXX
+
 BO_ 969 APS_status: 4 PARTY
  SG_ APS_statusCounter : 22|4@1+ (1,0) [0|15] ""  X
  SG_ APS_apbGpioState : 20|2@1+ (1,0) [0|3] ""  gtw

@@ -86,13 +86,13 @@ class TestTeslaFingerprint(unittest.TestCase):
         assert is_fsd_14 == expected, f"{fw}"
 
   def test_radar_detection(self):
-    # Test radar availability detection for cars with radar DBC defined
+    # Radar is forced off: bus 1 is a tapped vehicle bus carrying an unrelated RADAR_START_ADDR
     for radar in (True, False):
       fingerprint = gen_empty_fingerprint()
       if radar:
         fingerprint[1][RADAR_START_ADDR] = 8
       CP = CarInterface.get_params(CAR.TESLA_MODEL_3, fingerprint, [], False, False, False)
-      assert CP.radarUnavailable != radar
+      assert CP.radarUnavailable
 
   def test_no_radar_car(self):
     # Model X doesn't have radar DBC defined, should always be unavailable

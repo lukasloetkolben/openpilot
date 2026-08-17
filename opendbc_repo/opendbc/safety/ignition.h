@@ -34,15 +34,15 @@ void ignition_can_hook(const CANPacket_t *msg) {
     }
 
     // Tesla Model 3/Y exception
-    if ((msg->addr == 0x221U) && (len == 8)) {
-      // 0x221 overlaps with Rivian which has random data on byte 0
-      int counter = msg->data[6] >> 4;
+    if ((msg->addr == 0x118U) && (len == 8)) {
+      int counter = msg->data[1] & 0x0FU;  // DI_systemStatusCounter
 
       static int prev_counter_tesla = -1;
       if ((counter == ((prev_counter_tesla + 1) % 16)) && (prev_counter_tesla != -1)) {
-        // VCFRONT_LVPowerState->VCFRONT_vehiclePowerState
-        int power_state = (msg->data[0] >> 5U) & 0x3U;
-        ignition_can = power_state == 0x3;  // VEHICLE_POWER_STATE_DRIVE=3
+        // DI_systemStatus->DI_gear
+        int gear = (msg->data[2] >> 5U) & 0x7U;
+        // ignition on in any gear out of park
+        ignition_can = gear != 0x1;  // DI_GEAR_P=1
         ignition_can_cnt = 0U;
       }
       prev_counter_tesla = counter;

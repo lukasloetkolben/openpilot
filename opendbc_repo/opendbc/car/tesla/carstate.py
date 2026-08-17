@@ -34,6 +34,7 @@ class CarState(CarStateBase):
   def update(self, can_parsers) -> structs.CarState:
     cp_party = can_parsers[Bus.party]
     cp_ap_party = can_parsers[Bus.ap_party]
+    cp_adas = can_parsers[Bus.adas]
     ret = structs.CarState()
 
     # Vehicle speed
@@ -87,19 +88,15 @@ class CarState(CarStateBase):
     # Gear
     ret.gearShifter = GEAR_MAP[self.can_define.dv["DI_systemStatus"]["DI_gear"].get(int(cp_party.vl["DI_systemStatus"]["DI_gear"]), "DI_GEAR_INVALID")]
 
-    # Doors
-    ret.doorOpen = cp_party.vl["UI_warning"]["anyDoorOpen"] == 1
+    # Doors and seatbelt come from UI_warning, which the Juniper doesn't send
+    ret.doorOpen = False
+    ret.seatbeltUnlatched = False
 
-    # Blinkers
-    ret.leftBlinker = cp_party.vl["UI_warning"]["leftBlinkerBlinking"] in (1, 2)
-    ret.rightBlinker = cp_party.vl["UI_warning"]["rightBlinkerBlinking"] in (1, 2)
+    # Blinkers come off the tapped vehicle bus, since UI_warning is missing
+    ret.leftBlinker = cp_adas.vl["NEW_MSG_3F5"]["LEFT_BLINKER"] == 1
+    ret.rightBlinker = cp_adas.vl["NEW_MSG_3F5"]["RIGHT_BLINKER"] == 1
 
-    # Seatbelt
-    ret.seatbeltUnlatched = cp_party.vl["UI_warning"]["buckleStatus"] != 1
-
-    # Blindspot
-    ret.leftBlindspot = cp_ap_party.vl["DAS_status"]["DAS_blindSpotRearLeft"] != 0
-    ret.rightBlindspot = cp_ap_party.vl["DAS_status"]["DAS_blindSpotRearRight"] != 0
+    # Blindspot comes from DAS_status, which the Juniper doesn't send
 
     # AEB
     ret.stockAeb = cp_ap_party.vl["DAS_control"]["DAS_aebEvent"] == 1
@@ -140,5 +137,6 @@ class CarState(CarStateBase):
   def get_can_parsers(CP):
     return {
       Bus.party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.party),
-      Bus.ap_party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.autopilot_party)
+      Bus.ap_party: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.autopilot_party),
+      Bus.adas: CANParser(DBC[CP.carFingerprint][Bus.party], [], CANBUS.vehicle)
     }
