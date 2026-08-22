@@ -25,6 +25,7 @@ FACTOR_SANITY = 0.3
 FACTOR_SANITY_QLOG = 0.5
 FRICTION_SANITY = 0.5
 FRICTION_SANITY_QLOG = 0.8
+OFFSET_SANITY = 0.3  # m/s^2, max magnitude of learned lateral accel offset
 STEER_MIN_THRESHOLD = 0.02
 MIN_FILTER_DECAY = 50
 MAX_FILTER_DECAY = 250
@@ -109,7 +110,7 @@ class TorqueEstimator(ParameterEstimator):
           if cache_ltp.valid:
             initial_params = {
               'latAccelFactor': cache_ltp.latAccelFactorFiltered,
-              'latAccelOffset': cache_ltp.latAccelOffsetFiltered,
+              'latAccelOffset': float(np.clip(cache_ltp.latAccelOffsetFiltered, -OFFSET_SANITY, OFFSET_SANITY)),
               'frictionCoefficient': cache_ltp.frictionCoefficientFiltered
             }
           cached_points: list[list[float]] = [list(point) for point in cache_ltp.points]
@@ -228,6 +229,7 @@ class TorqueEstimator(ParameterEstimator):
         else:
           lateralTorqueParameters.valid = True
           latAccelFactor = np.clip(latAccelFactor, self.min_lataccel_factor, self.max_lataccel_factor)
+          latAccelOffset = np.clip(latAccelOffset, -OFFSET_SANITY, OFFSET_SANITY)
           frictionCoeff = np.clip(frictionCoeff, self.min_friction, self.max_friction)
           self.update_params({'latAccelFactor': latAccelFactor, 'latAccelOffset': latAccelOffset, 'frictionCoefficient': frictionCoeff})
 
