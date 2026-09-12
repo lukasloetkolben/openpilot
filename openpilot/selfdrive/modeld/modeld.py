@@ -31,6 +31,7 @@ from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_drivi
 from openpilot.common.file_chunker import open_file_chunked
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
 from openpilot.selfdrive.modeld.helpers import chestnut_present, chestnut_compiled, modeld_pkl_path, load_oob
+from openpilot.selfdrive.modeld.temporal_ensemble import TemporalEnsemble
 
 SEND_RAW_PRED = os.getenv('SEND_RAW_PRED')
 
@@ -41,7 +42,8 @@ BIG_MODEL_TIMEOUT = 60
 
 
 def get_action_from_model(model_output: dict[str, np.ndarray], prev_action: log.ModelDataV2.Action,
-                          lat_action_t: float, long_action_t: float, v_ego: float) -> log.ModelDataV2.Action:
+                          lat_action_t: float, long_action_t: float, v_ego: float,
+                          curvature_delta: float = 0.0) -> log.ModelDataV2.Action:
   if 'action' not in model_output:
     plan = model_output['plan'][0]
     desired_accel = get_accel_from_plan(plan[:,Plan.VELOCITY][:,0],
@@ -56,6 +58,9 @@ def get_action_from_model(model_output: dict[str, np.ndarray], prev_action: log.
   else:
     desired_accel = model_output['action'][0,1]
     desired_curvature = model_output['action'][0,0] / (max(1.0, v_ego))**2
+  # temporal ensembling correction, exactly 0.0 when disabled
+  if curvature_delta != 0.0:
+    desired_curvature = desired_curvature + curvature_delta
   stop = should_stop(v_ego, desired_accel)
   desired_accel = smooth_value(desired_accel, prev_action.desiredAcceleration, LONG_SMOOTH_SECONDS)
   if v_ego > MIN_LAT_CONTROL_SPEED:
@@ -282,6 +287,16 @@ def main(demo=False):
 
   DH = DesireHelper()
 
+  # temporal ensembling of the plan, off unless explicitly enabled
+  temporal_ensemble = TemporalEnsemble() if (os.getenv('TEMPORAL_ENSEMBLE') or
+                                             params.get_bool("TemporalEnsembleEnabled")) else None
+  if temporal_ensemble is not None:
+    cloudlog.warning("temporal ensembling enabled")
+  prev_rpy_calib = None
+  prev_intent = None
+  ensemble_ticks = 0
+  ensemble_gates = 0
+
   while True:
     # Keep receiving frames until we are at least 1 frame ahead of previous extra frame
     while meta_main.timestamp_sof < meta_extra.timestamp_sof + 25000000:
@@ -330,6 +345,10 @@ def main(demo=False):
       extra_intrinsics = dc.wide_road.intrinsics if has_wide_camera else dc.narrow_road.intrinsics
       model_transform_extra = get_warp_matrix(device_from_calib_euler, extra_intrinsics, True).astype(np.float32)
       extrinsics_calibration_seen = True
+      if temporal_ensemble is not None and prev_rpy_calib is not None and \
+         not np.array_equal(prev_rpy_calib, device_from_calib_euler):
+        temporal_ensemble.reset()
+      prev_rpy_calib = device_from_calib_euler
 
     traffic_convention = np.zeros(2)
     traffic_convention[int(is_rhd)] = 1
@@ -372,6 +391,8 @@ def main(demo=False):
       cloudlog.exception("big model failed, fall back to small")
       params.put_bool("ChestnutActive", False)
       model = small_model
+      if temporal_ensemble is not None:
+        temporal_ensemble.reset()
       if chestnut_state is not None:
         chestnut_state.big = False
       run_count = 0
@@ -384,7 +405,25 @@ def main(demo=False):
       drivingdata_send = messaging.new_message('drivingModelData')
       posenet_send = messaging.new_message('cameraOdometry')
 
-      action = get_action_from_model(model_output, prev_action, lat_action_t, long_action_t, v_ego)
+      curvature_delta = 0.0
+      if temporal_ensemble is not None:
+        # Reset on the *edge* of an intent change, not for as long as it lasts. Old predictions
+        # from before the change refer to a different intent, but once the buffer has refilled
+        # inside the maneuver the ensemble is valid again, and a turn is where it helps most.
+        intent = (bool(sm['carControl'].latActive), int(desire), int(DH.lane_change_state))
+        if prev_intent is not None and intent != prev_intent:
+          temporal_ensemble.reset()
+        prev_intent = intent
+        curvature_delta = temporal_ensemble.update(meta_main.timestamp_eof / 1e9,
+                                                   model_output['plan'][0], model_output['plan_stds'][0],
+                                                   model_output['pose'][0], v_ego, lat_action_t)
+        ensemble_ticks += 1
+        ensemble_gates += int(temporal_ensemble.gated)
+        if ensemble_ticks % (20 * ModelConstants.MODEL_RUN_FREQ) == 0:
+          cloudlog.event("temporal_ensemble", ticks=ensemble_ticks, gate_rate=ensemble_gates / ensemble_ticks,
+                         members=temporal_ensemble.n_members, delta=temporal_ensemble.delta)
+
+      action = get_action_from_model(model_output, prev_action, lat_action_t, long_action_t, v_ego, curvature_delta)
       prev_action = action
       fill_model_msg(modelv2_send, model_output, action,
                      publish_state, meta_main.frame_id, meta_extra.frame_id, frame_id,
