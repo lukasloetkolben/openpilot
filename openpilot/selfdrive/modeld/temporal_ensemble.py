@@ -112,6 +112,14 @@ class TemporalEnsemble:
     self.n_members = 0
     self.gated = False
     self.delta = 0.0
+    # per member (age, signed yaw difference at the evaluation point, weight there), and why
+    # members were dropped. Used to answer whether old predictions survive at all in curves.
+    self.member_info: list[tuple[float, float, float]] = []
+    self.rejected = {'heading': 0, 'lateral': 0, 'coverage': 0}
+    # the fused yaw profile over the current plan's arclength grid, for inspection and plotting.
+    # Equal to the current plan's own profile whenever nothing was fused.
+    self.s_grid: np.ndarray | None = None
+    self.fused_yaw: np.ndarray | None = None
 
   def reset(self) -> None:
     """Drop all history. The world pose keeps integrating, only correlations are cut."""
@@ -150,6 +158,7 @@ class TemporalEnsemble:
     # onto the current plan lines up the wrong road points
     psi_predicted = float(np.interp(t - snap.t, T_IDXS, snap.yaw))
     if abs(_wrap(-dpsi - psi_predicted)) > self.cfg.max_heading_mismatch:
+      self.rejected['heading'] += 1
       return None
 
     c, s_ = math.cos(self._psi), math.sin(self._psi)
@@ -163,11 +172,13 @@ class TemporalEnsemble:
 
     s0, lat_off = _closest_approach(qx, qy, snap.s)
     if lat_off > self.cfg.max_lateral_offset:
+      self.rejected['lateral'] += 1
       return None
 
     s_member = snap.s - s0
     covered = (s_target >= s_member[0]) & (s_target <= s_member[-1])
     if covered.mean() < self.cfg.min_coverage:
+      self.rejected['coverage'] += 1
       return None
 
     yaw = np.interp(s_target, s_member, snap.yaw + dpsi)
@@ -187,6 +198,9 @@ class TemporalEnsemble:
     """
     self.gated = False
     self.delta = 0.0
+    self.member_info = []
+    self.s_grid = None
+    self.fused_yaw = None
 
     pose_ok = self._integrate_pose(t, pose)
 
@@ -201,6 +215,7 @@ class TemporalEnsemble:
 
     snap = _Snapshot(t=t, x=self._x, y=self._y, psi=self._psi,
                      px=px, py=py, s=s_target, yaw=yaw, yaw_std=yaw_std)
+    self.s_grid, self.fused_yaw = s_target, yaw
 
     members = []
     if pose_ok and self.cfg.buffer_len > 0 and v_ego >= self.cfg.min_speed:
@@ -209,8 +224,7 @@ class TemporalEnsemble:
         if p is None:
           continue
         age = t - old.t
-        w_age = math.exp(-age / self.cfg.age_tau)
-        members.append((p[0], p[1], p[2], w_age))
+        members.append((p[0], p[1], p[2], math.exp(-age / self.cfg.age_tau), age))
 
     self.n_members = len(members) + 1
     if not members:
@@ -233,6 +247,7 @@ class TemporalEnsemble:
 
     yaw_fused = (w * yaws).sum(axis=0)
     dyaw = yaw_fused - yaw
+    self.fused_yaw = yaw_fused
 
     # reactivity gate: a large divergence means the model just saw something the history
     # does not contain. Follow the new plan alone rather than averaging the surprise away.
@@ -241,6 +256,7 @@ class TemporalEnsemble:
       self.reset()
       self._push(snap)
       self.n_members = 1
+      self.fused_yaw = yaw
       return 0.0
 
     # same evaluation point and scaling as get_curvature_from_plan, so the correction is
@@ -252,6 +268,12 @@ class TemporalEnsemble:
     s_eval = float(np.interp(t_eval, T_IDXS, s_target))
     dpsi_target = float(np.interp(s_eval, s_target, dyaw)) * scale
 
+    # record what each member contributed at the evaluation point
+    for m, m_yaw, m_w in zip(members, yaws[1:], w[1:], strict=True):
+      self.member_info.append((m[4],
+                               float(np.interp(s_eval, s_target, m_yaw - yaw)),
+                               float(np.interp(s_eval, s_target, m_w))))
+
     delta = 2 * dpsi_target / (max(v_ego, MIN_SPEED) * max(lat_action_t, 1e-3))
     delta = float(np.clip(delta, -self.cfg.max_curvature_delta, self.cfg.max_curvature_delta))
 
@@ -262,6 +284,26 @@ class TemporalEnsemble:
   def _push(self, snap: _Snapshot) -> None:
     if self.cfg.buffer_len > 0:
       self._buf.append(snap)
+
+
+  @property
+  def ego_pose(self) -> tuple[float, float, float]:
+    """Integrated ego pose (x, y, psi) in the session local world frame."""
+    return self._x, self._y, self._psi
+
+
+def path_from_yaw(s: np.ndarray, yaw: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+  """Reconstruct a path from a yaw profile over arclength, trapezoidal.
+
+  The fusion works on yaw over distance, so turning it back into waypoints for plotting means
+  integrating it. The result starts at the origin of the frame the profile is expressed in.
+  """
+  ds = np.diff(s)
+  cx = np.cos(yaw)
+  cy = np.sin(yaw)
+  x = np.concatenate(([0.0], np.cumsum(0.5 * (cx[1:] + cx[:-1]) * ds)))
+  y = np.concatenate(([0.0], np.cumsum(0.5 * (cy[1:] + cy[:-1]) * ds)))
+  return x, y
 
 
 def stds_monotonic(stds: np.ndarray) -> tuple[bool, float]:

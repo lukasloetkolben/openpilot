@@ -83,3 +83,76 @@ Per section 4 of the brief ("shows the effect is small, the task ends here, whic
 result") the code stays in the tree as a measured negative result and an A/B reference. It is off
 by default. Before investing further, the control comparisons from section 6 (wide angle ablation,
 modality dropout) should be measured against the same baseline.
+
+## Does it help in curves? No, the sign is inverted
+
+Segments 6:10 of the same route, picked by scanning all 166 qlogs for curvature at speed
+(note `modelV2` has decimation `None` and is absent from qlogs, use `controlsState` to scan).
+4800 ticks, 1600 of them with |curvature| in 0.005..0.012 at ~20 m/s, gate rate 4.90 %.
+
+Members are used: zero rejections by the heading, lateral offset or coverage checks, mean
+ensemble size 7.65 in curves, effective weighted age 0.19 s. The mechanism runs as designed.
+
+But the signed disagreement between an old prediction and the current one at the same road
+point, positive meaning the old one asks for *more* curvature into the turn, is negative and
+grows monotonically with age:
+
+| member age | mean signed dyaw | sd | mean weight |
+| --- | --- | --- | --- |
+| 0.0-0.1 s | -0.00010 rad | 0.00079 | 0.190 |
+| 0.1-0.2 s | -0.00023 rad | 0.00149 | 0.139 |
+| 0.2-0.3 s | -0.00052 rad | 0.00215 | 0.100 |
+| 0.3-0.4 s | -0.00079 rad | 0.00259 | 0.077 |
+| 0.4-0.6 s | -0.00118 rad | 0.00308 | 0.059 |
+
+**Older predictions are systematically flatter, not sharper.** Section 1 of the brief assumes the
+opposite: that a curve seen from 100 m in the narrow FOV is better understood than the same curve
+at 20 m in the wide angle. The data inverts that. The net effect of the ensemble in curves is
+`delta * sign(curvature)` = -8.5e-05 1/m, a 1 to 1.7 % *reduction* of the commanded curvature,
+and the phase of the fused signal against the raw one is 0 ticks: no earlier turn in.
+
+The cause is the one section 5 already names. Under arclength indexing, an old member's
+contribution to the road point in front of us comes from the far end of its own horizon, and the
+far end of a plan is flatter than reality, because the model regresses toward straight where it is
+uncertain. That is a bias, so age weighting can attenuate it but never remove it, and averaging
+cannot fix it. Curve cutting is therefore not addressed by this mechanism, and cannot be.
+
+### The one constructive reading
+
+The flattening is not noise: it is monotonic in age and repeatable, -0.00118 rad at 0.4-0.6 s.
+That makes it a measurable, signed model bias. The useful move is the opposite of ensembling:
+do not average *toward* the older, flatter prediction, extrapolate *away* from it, using the
+measured age slope to estimate how much the current prediction is itself under curving. That is a
+bias correction rather than a variance reduction, it needs its own validation on several routes
+before it means anything, and it does not reuse the fusion machinery, only the projection and
+re-indexing part of it.
+
+## Would a driver feel it?
+
+Same curvy segments, corrections converted with the route's logged vehicle parameters
+(Rivian R1: wheelbase 3.08 m, steer ratio 15.01) into what reaches the wheel.
+
+In curves (1604 ticks at 20.3 m/s), |correction| as a steering wheel angle and as a change in
+lateral acceleration:
+
+| | p50 | p90 | p99 | max |
+| --- | --- | --- | --- | --- |
+| steering wheel | 0.39 deg | 1.39 deg | 2.90 deg | 16.92 deg |
+| lateral accel | 0.061 m/s^2 | 0.216 m/s^2 | 0.418 m/s^2 | 1.91 m/s^2 |
+
+Exceedance rates in curves: 41.6 % of ticks above 0.5 deg, **18.8 % above 1 deg**, 4.5 % above
+2 deg; 33.4 % above 0.1 m/s^2, **11.8 % above 0.2 m/s^2**. At 20 Hz that is several perceptible
+nudges per second of curve driving. The p99 correction is 183 % of the ISO jerk headroom for one
+model tick, so those get clipped by `clip_curvature` - the module would be fighting the rate
+limiter rather than steering the car.
+
+So the answer is not "no difference". It is **a difference you would feel, that buys nothing**:
+the median is below the perception threshold, the tail is well above it, and the measured content
+of that tail is noise plus the wrong signed 1 to 2 % flattening from the section above. Net jerk
+moves by -0.2 % straight and -1.5 % curvy, so the smoothing gain and the injected restlessness
+roughly cancel.
+
+If the module were ever enabled, `max_curvature_delta` and `gate_psi` are far too loose for the
+value delivered: the gate at 0.06 rad lets corrections of up to 6.4e-03 1/m through, which is the
+16.9 deg outlier above. Capping at ~5e-04 1/m would keep every correction below the perception
+threshold. But with the benefit measured at roughly zero, the correct setting is off.
