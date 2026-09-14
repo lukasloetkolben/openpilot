@@ -35,7 +35,8 @@ from openpilot.selfdrive.modeld.temporal_ensemble import TemporalEnsemble
 
 SEND_RAW_PRED = os.getenv('SEND_RAW_PRED')
 
-LAT_SMOOTH_SECONDS = 0.0
+LAT_SMOOTH_SECONDS = 0.1  # smooths only the temporal-ensemble curvature_delta (wobbly at 0.0);
+                          # the model's own desired_curvature is untouched and stays a direct passthrough
 LONG_SMOOTH_SECONDS = 0.3
 MIN_LAT_CONTROL_SPEED = 0.3
 BIG_MODEL_TIMEOUT = 60
@@ -58,14 +59,14 @@ def get_action_from_model(model_output: dict[str, np.ndarray], prev_action: log.
   else:
     desired_accel = model_output['action'][0,1]
     desired_curvature = model_output['action'][0,0] / (max(1.0, v_ego))**2
-  # temporal ensembling correction, exactly 0.0 when disabled
+  # temporal ensembling correction, exactly 0.0 when disabled. Already smoothed by the caller
+  # (curvature_delta_filter) before it gets here, so the model's own desired_curvature above is
+  # otherwise a direct passthrough, same as before this was added.
   if curvature_delta != 0.0:
     desired_curvature = desired_curvature + curvature_delta
   stop = should_stop(v_ego, desired_accel)
   desired_accel = smooth_value(desired_accel, prev_action.desiredAcceleration, LONG_SMOOTH_SECONDS)
-  if v_ego > MIN_LAT_CONTROL_SPEED:
-    desired_curvature = smooth_value(desired_curvature, prev_action.desiredCurvature, LAT_SMOOTH_SECONDS)
-  else:
+  if v_ego <= MIN_LAT_CONTROL_SPEED:
     desired_curvature = prev_action.desiredCurvature
 
   return log.ModelDataV2.Action(desiredCurvature=float(desired_curvature),
@@ -292,6 +293,9 @@ def main(demo=False):
                                              params.get_bool("TemporalEnsembleEnabled")) else None
   if temporal_ensemble is not None:
     cloudlog.warning("temporal ensembling enabled")
+  # smooths only the ensemble's curvature_delta, not the model's own output. Starts and decays
+  # back to 0 exactly like curvature_delta itself, so it's a no-op whenever the ensemble is.
+  curvature_delta_filter = FirstOrderFilter(0.0, LAT_SMOOTH_SECONDS, DT_MDL)
   prev_rpy_calib = None
   prev_intent = None
   ensemble_ticks = 0
@@ -335,7 +339,7 @@ def main(demo=False):
     is_rhd = sm["driverMonitoringState"].isRHD
     frame_id = sm["narrowRoadCameraState"].frameId
     v_ego = max(sm["carState"].vEgo, 0.)
-    lat_delay = sm["lateralDelay"].lateralDelay + LAT_SMOOTH_SECONDS
+    lat_delay = sm["lateralDelay"].lateralDelay
     if sm.updated["extrinsicsCalibration"] and sm.seen['narrowRoadCameraState'] and sm.seen['deviceState']:
       device_from_calib_euler = np.array(sm["extrinsicsCalibration"].rpyCalib, dtype=np.float32)
       dc = DEVICE_CAMERAS[(str(sm['deviceState'].deviceType), str(sm['narrowRoadCameraState'].sensor))]
@@ -348,6 +352,7 @@ def main(demo=False):
       if temporal_ensemble is not None and prev_rpy_calib is not None and \
          not np.array_equal(prev_rpy_calib, device_from_calib_euler):
         temporal_ensemble.reset()
+        curvature_delta_filter.x = 0.0
       prev_rpy_calib = device_from_calib_euler
 
     traffic_convention = np.zeros(2)
@@ -393,6 +398,7 @@ def main(demo=False):
       model = small_model
       if temporal_ensemble is not None:
         temporal_ensemble.reset()
+        curvature_delta_filter.x = 0.0
       if chestnut_state is not None:
         chestnut_state.big = False
       run_count = 0
@@ -413,10 +419,17 @@ def main(demo=False):
         intent = (bool(sm['carControl'].latActive), int(desire), int(DH.lane_change_state))
         if prev_intent is not None and intent != prev_intent:
           temporal_ensemble.reset()
+          curvature_delta_filter.x = 0.0
         prev_intent = intent
         curvature_delta = temporal_ensemble.update(meta_main.timestamp_eof / 1e9,
                                                    model_output['plan'][0], model_output['plan_stds'][0],
                                                    model_output['pose'][0], v_ego, lat_action_t)
+        if temporal_ensemble.gated:
+          # divergence gate already dropped the history this tick, follow it and not a stale filter
+          curvature_delta_filter.x = 0.0
+          curvature_delta = 0.0
+        else:
+          curvature_delta = curvature_delta_filter.update(curvature_delta)
         ensemble_ticks += 1
         ensemble_gates += int(temporal_ensemble.gated)
         if ensemble_ticks % (20 * ModelConstants.MODEL_RUN_FREQ) == 0:
