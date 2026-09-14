@@ -14,6 +14,7 @@ from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDX
 from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N, get_accel_from_plan, should_stop
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.common.swaglog import cloudlog
+from openpilot.sunnypilot.selfdrive.controls.lib.smart_cruise_control.vision_controller import SmartCruiseControlVision
 
 A_CRUISE_MAX_VALS = [1.6, 1.2, 0.8, 0.6]
 A_CRUISE_MAX_BP = [0., 10.0, 25., 40.]
@@ -66,6 +67,9 @@ class LongitudinalPlanner:
     self.output_a_target = init_a
     self.output_should_stop = False
 
+    # ported from sunnypilot, see openpilot/sunnypilot/selfdrive/controls/lib/smart_cruise_control
+    self.scc_vision = SmartCruiseControlVision()
+
     self.v_desired_trajectory = np.zeros(CONTROL_N)
     self.a_desired_trajectory = np.zeros(CONTROL_N)
     self.j_desired_trajectory = np.zeros(CONTROL_N)
@@ -95,6 +99,13 @@ class LongitudinalPlanner:
     self.allow_throttle = throttle_prob > ALLOW_THROTTLE_THRESHOLD or v_ego <= MIN_ALLOW_THROTTLE_SPEED
 
     steer_angle_without_offset = sm['carState'].steeringAngleDeg - sm['vehicleParameters'].angleOffsetDeg
+
+    # SCC-V (ported from sunnypilot): predicts upcoming turns from the vision model and, when it
+    # wants to go slower than the current v_cruise, that becomes the effective cruise target.
+    self.scc_vision.update(sm, sm['carControl'].enabled, sm['carControl'].cruiseControl.override,
+                            self.v_desired_filter.x, self.output_a_target, v_cruise)
+    if self.scc_vision.output_v_target < v_cruise:
+      v_cruise = self.scc_vision.output_v_target
 
     if reset_state:
       self.v_desired_filter.x = v_ego
