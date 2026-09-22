@@ -1223,6 +1223,46 @@ struct LateralManeuverPlan {
   desiredCurvature @0 :Float32;  # 1/m
 }
 
+struct TeslaLanePlan {
+  # Lateral plan derived from the stock Tesla Autopilot lane model (DAS_lanes, 0x239),
+  # used in place of the comma model's desired curvature when valid.
+  valid @0 :Bool;                # polynomial is usable for lateral control this frame
+  invalidReason @1 :InvalidReason;
+
+  desiredCurvature @2 :Float32;  # 1/m, openpilot sign convention (positive curvature = right)
+  lookahead @3 :Float32;         # m, lookahead distance used by the pure pursuit law
+  lateralOffset @4 :Float32;     # m, lane center offset at the lookahead point
+
+  # decoded DAS_lanes lane center polynomial: y(x) = c0 + c1*x + c2*x^2 + c3*x^3
+  # x is forward, y is positive to the right (same frame as modelV2)
+  c0 @5 :Float32;                # m
+  c1 @6 :Float32;                # rad
+  c2 @7 :Float32;                # 1/m
+  c3 @8 :Float32;                # 1/m^2
+  viewRange @9 :Float32;         # m, how far ahead Tesla claims the lane model reaches
+  laneWidth @10 :Float32;        # m
+
+  leftLineUsage @11 :LineUsage;
+  rightLineUsage @12 :LineUsage;
+
+  enum LineUsage {
+    rejectedUnavailable @0;
+    available @1;
+    fused @2;
+    blacklisted @3;
+  }
+
+  enum InvalidReason {
+    none @0;
+    noData @1;         # DAS_lanes not being received
+    linesNotFused @2;  # Tesla is not using both lane lines
+    shortRange @3;     # viewRange too short to control on
+    lowSpeed @4;       # below the minimum speed for lane based control
+    laneChange @5;     # a lane change is in progress, hand back to the comma model
+    implausible @6;    # decoded polynomial failed sanity checks
+  }
+}
+
 struct LongitudinalPlan @0xe00b5b3eba12876c {
   modelMonoTime @9 :UInt64;
   hasLead @7 :Bool;
@@ -2611,6 +2651,7 @@ struct Event {
     bookmarkButton @148 :UserBookmark;
 
     lateralManeuverPlan @150 :LateralManeuverPlan;
+    teslaLanePlan @154 :TeslaLanePlan;
 
     # *********** debug ***********
     testJoystick @52 :Joystick;

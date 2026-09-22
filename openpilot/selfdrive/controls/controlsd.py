@@ -40,7 +40,7 @@ class Controls:
 
     self.sm = messaging.SubMaster(['lateralDelay', 'vehicleParameters', 'lateralTorqueParameters', 'modelV2', 'selfdriveState',
                                    'extrinsicsCalibration', 'deviceMotion', 'longitudinalPlan', 'lateralManeuverPlan', 'carState', 'carOutput',
-                                   'driverMonitoringState', 'onroadEvents', 'driverAssistance'], poll='selfdriveState')
+                                   'driverMonitoringState', 'onroadEvents', 'driverAssistance', 'teslaLanePlan'], poll='selfdriveState')
     self.pm = messaging.PubMaster(['carControl', 'controlsState'])
 
     self.steer_limited_by_safety = False
@@ -121,9 +121,15 @@ class Controls:
     # Steering PID loop and lateral MPC
     # Reset desired curvature to current to avoid violating the limits on engage
     if self.sm.valid['lateralManeuverPlan']:
-      new_desired_curvature = self.sm['lateralManeuverPlan'].desiredCurvature if CC.latActive else self.curvature
+      planned_curvature = self.sm['lateralManeuverPlan'].desiredCurvature
+    elif self.sm.valid['teslaLanePlan'] and self.sm['teslaLanePlan'].valid:
+      # steering on the stock Tesla Autopilot lane model instead of the comma model.
+      # teslaLanePlan blends back to model_v2.action.desiredCurvature itself, so this
+      # is continuous in both directions.
+      planned_curvature = self.sm['teslaLanePlan'].desiredCurvature
     else:
-      new_desired_curvature = model_v2.action.desiredCurvature if CC.latActive else self.curvature
+      planned_curvature = model_v2.action.desiredCurvature
+    new_desired_curvature = planned_curvature if CC.latActive else self.curvature
     self.desired_curvature, curvature_limited = clip_curvature(CS.vEgo, self.desired_curvature, new_desired_curvature, lp.roll)
     lat_delay = self.sm["lateralDelay"].lateralDelay + LAT_SMOOTH_SECONDS
 

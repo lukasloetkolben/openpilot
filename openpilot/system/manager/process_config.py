@@ -46,6 +46,9 @@ def lat_maneuver(started: bool, params: Params, CP: car.CarParams) -> bool:
 def not_long_maneuver(started: bool, params: Params, CP: car.CarParams) -> bool:
   return started and not params.get_bool("LongitudinalManeuverMode")
 
+def tesla_lanes(started: bool, params: Params, CP: car.CarParams) -> bool:
+  return started and CP.brand == 'tesla' and params.get_bool("TeslaLaneLinesEnabled")
+
 def qcomgps(started: bool, params: Params, CP: car.CarParams) -> bool:
   return started and not ublox_available()
 
@@ -107,6 +110,7 @@ procs = [
   PythonProcess("plannerd", "openpilot.selfdrive.controls.plannerd", not_long_maneuver),
   PythonProcess("maneuversd", "openpilot.tools.longitudinal_maneuvers.maneuversd", long_maneuver),
   PythonProcess("lateral_maneuversd", "openpilot.tools.lateral_maneuvers.lateral_maneuversd", lat_maneuver),
+  PythonProcess("teslalatplannerd", "openpilot.selfdrive.controls.teslalatplannerd", tesla_lanes),
   PythonProcess("radard", "openpilot.selfdrive.controls.radard", only_onroad),
   PythonProcess("hardwared", "openpilot.system.hardware.hardwared", always_run),
   PythonProcess("modem", "openpilot.common.hardware.comma.modem", always_run, enabled=COMMA_HARDWARE),
