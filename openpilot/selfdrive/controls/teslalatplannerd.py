@@ -7,7 +7,6 @@ from opendbc.car.structs import car
 from opendbc.car.tesla.values import CANBUS, DBC
 
 from openpilot.cereal import log, messaging
-from openpilot.common.params import Params
 from openpilot.common.realtime import DT_MDL, Priority, Ratekeeper, config_realtime_process
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.controls.lib.tesla_lane_planner import LINE_USAGE, TeslaLanePlanner
@@ -87,6 +86,9 @@ class TeslaLatPlannerD:
 
 
 def main():
+  # imported here so TeslaLatPlannerD stays importable without the compiled params lib
+  from openpilot.common.params import Params
+
   config_realtime_process(5, Priority.CTRL_LOW)
 
   params = Params()
