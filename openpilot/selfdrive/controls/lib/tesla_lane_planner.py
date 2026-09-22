@@ -114,6 +114,13 @@ class TeslaLanePlanner:
     return self.time_since_counter < STALE_TIME
 
   def _check(self, lanes, v_ego: float, lane_change: bool, dt: float) -> str:
+    # speed gate with hysteresis so we do not chatter around the threshold. Updated on
+    # every frame regardless of which reason we end up reporting below.
+    if self.speed_ok:
+      self.speed_ok = v_ego > MIN_SPEED
+    else:
+      self.speed_ok = v_ego > MIN_SPEED + MIN_SPEED_HYST
+
     if lanes is None:
       self.time_since_counter += dt
       return InvalidReason.NO_DATA
@@ -121,16 +128,9 @@ class TeslaLanePlanner:
     if not self._lane_data_fresh(lanes['DAS_lanesCounter'], dt):
       return InvalidReason.NO_DATA
 
-    # speed gate with hysteresis so we do not chatter around the threshold
-    if self.speed_ok:
-      self.speed_ok = v_ego > MIN_SPEED
-    else:
-      self.speed_ok = v_ego > MIN_SPEED + MIN_SPEED_HYST
-    if not self.speed_ok:
-      return InvalidReason.LOW_SPEED
-
-    if lane_change:
-      return InvalidReason.LANE_CHANGE
+    # What is wrong with the data is reported before our own policy gates: checking
+    # speed first would mask every other reason in the diagnostics, since Tesla stops
+    # publishing usable lines at roughly the same speed we stop accepting them.
 
     # Tesla tells us directly whether it is actually using both lines. Anything other
     # than FUSED on either side means the polynomial is extrapolated or stale.
@@ -143,6 +143,12 @@ class TeslaLanePlanner:
     if (abs(lanes['DAS_virtualLaneC0']) > MAX_C0 or abs(lanes['DAS_virtualLaneC1']) > MAX_C1 or
         abs(lanes['DAS_virtualLaneC2']) > MAX_C2):
       return InvalidReason.IMPLAUSIBLE
+
+    if not self.speed_ok:
+      return InvalidReason.LOW_SPEED
+
+    if lane_change:
+      return InvalidReason.LANE_CHANGE
 
     return InvalidReason.NONE
 
