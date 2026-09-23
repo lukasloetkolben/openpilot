@@ -26,7 +26,13 @@ class TeslaLatPlannerD:
     self.parsers = {bus: CANParser(DBC[CP.carFingerprint][Bus.party], [("DAS_lanes", 10)], bus)
                     for bus in LANES_BUSES}
 
-    self.sm = messaging.SubMaster(['carState', 'modelV2', 'selfdriveState'])
+    # We tick at 20Hz and SubMaster sockets conflate, so we can observe at most one
+    # message per service per tick. carState is declared at 100Hz, so its average
+    # frequency check can never pass from here and would veto every frame. Alive and
+    # valid are what we actually care about: is the comma model healthy enough to fall
+    # back to. Dropping the freq check is why this is not simply all_checks().
+    self.sm = messaging.SubMaster(['carState', 'modelV2', 'selfdriveState'],
+                                  ignore_avg_freq=['carState', 'modelV2', 'selfdriveState'])
     self.pm = messaging.PubMaster(['teslaLanePlan'])
     self.can_sock = messaging.sub_sock('can', timeout=20)
 

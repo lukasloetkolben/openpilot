@@ -42,9 +42,6 @@ class Harness:
     self.pm = messaging.PubMaster(['can', 'carState', 'modelV2', 'selfdriveState'])
     self.sm = messaging.SubMaster(['teslaLanePlan'])
     self.planner = TeslaLatPlannerD(CP)
-    # this test drives the daemon step by step rather than in real time, so the
-    # SubMaster average frequency check can never pass. It is not what we are testing.
-    self.planner.sm.ignore_average_freq = ['carState', 'modelV2', 'selfdriveState']
     self.counter = 0
     # let every socket attach before the first publish, otherwise the daemon misses
     # the opening frames and the test is racing the transport rather than the logic
@@ -89,6 +86,12 @@ def harness():
 
 
 class TestTeslaLatPlannerD:
+  def test_does_not_require_unobservable_frequencies(self, harness):
+    """Regression: the daemon ticks at 20Hz against conflated sockets, so it can never
+    observe carState's 100Hz. Requiring that vetoed every frame on a real drive."""
+    for s in ('carState', 'modelV2', 'selfdriveState'):
+      assert s in harness.planner.sm.ignore_average_freq, s
+
   def test_publishes_and_engages_on_real_can(self, harness):
     """A packed DAS_lanes frame must make it all the way to a published plan."""
     plan = harness.run(60, c2=0.001, view_range=45.0)
