@@ -69,6 +69,7 @@ class UIState:
         "vehicleParameters",
         "testJoystick",
         "rawAudioData",
+        "teslaLanePlan",
       ]
     )
 
