@@ -82,6 +82,7 @@ class TeslaLanePlan:
     self.lane_width = 0.0
     self.left_line_usage = 0
     self.right_line_usage = 0
+    self.blend = 0.0
 
 
 class TeslaLanePlanner:
@@ -209,6 +210,7 @@ class TeslaLanePlanner:
         self.curvature_initialized = False
 
     plan.desired_curvature = float(self.blend * self.curvature + (1.0 - self.blend) * model_curvature)
+    plan.blend = float(self.blend)
     # `valid` means "controlsd should use desiredCurvature"; at blend 0 it already
     # equals the model curvature exactly, so the handoff in either direction is seamless.
     plan.valid = self.blend > 0.0

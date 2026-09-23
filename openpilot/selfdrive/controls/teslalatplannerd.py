@@ -67,6 +67,7 @@ class TeslaLatPlannerD:
     msg.valid = self.sm.all_checks(['carState', 'modelV2'])
     p = msg.teslaLanePlan
     p.valid = plan.valid
+    p.blend = plan.blend
     p.invalidReason = plan.invalid_reason
     p.desiredCurvature = plan.desired_curvature
     p.lookahead = plan.lookahead

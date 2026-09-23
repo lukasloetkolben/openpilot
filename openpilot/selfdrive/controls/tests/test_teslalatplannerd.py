@@ -94,6 +94,7 @@ class TestTeslaLatPlannerD:
     plan = harness.run(60, c2=0.001, view_range=45.0)
     assert plan.valid, plan.invalidReason
     assert plan.invalidReason == 'none'
+    assert plan.blend == 1.0, plan.blend
     assert plan.leftLineUsage == 'fused'
     assert plan.rightLineUsage == 'fused'
     assert abs(plan.viewRange - 45.0) < 1.0
@@ -117,6 +118,7 @@ class TestTeslaLatPlannerD:
     assert not plan.valid
     assert plan.invalidReason == 'noData'
     assert abs(plan.desiredCurvature - 0.01) < 1e-6
+    assert plan.blend == 0.0
 
   def test_reports_lines_not_fused(self, harness):
     plan = harness.run(30, usage=0)

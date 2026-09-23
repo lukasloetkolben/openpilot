@@ -1245,6 +1245,9 @@ struct TeslaLanePlan {
   leftLineUsage @11 :LineUsage;
   rightLineUsage @12 :LineUsage;
 
+  # 0 = comma model is steering, 1 = Tesla's lane model is, in between = handing over
+  blend @13 :Float32;
+
   enum LineUsage {
     rejectedUnavailable @0;
     available @1;
