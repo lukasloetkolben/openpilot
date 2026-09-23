@@ -27,7 +27,7 @@ def main():
 
   hdr = f"{'source':>7} {'blend':>6} {'why not':>14} {'curv cmd':>9} {'comma':>9} "
   hdr += f"{'v':>5} {'range':>6} {'look':>5} {'width':>6} {'c0':>7} {'lat':>6}"
-  print(hdr)
+  print(hdr, flush=True)
   last = 0.0
   while True:
     sm.update(200)
@@ -37,7 +37,7 @@ def main():
         last = time.monotonic()
         running = sm.recv_frame['teslaLanePlan'] > 0
         why = 'no teslaLanePlan' if not running else 'stale'
-        print(f"{'COMMA ':>7} {'-':>6} {why:>14}   (teslalatplannerd not publishing)")
+        print(f"{'COMMA ':>7} {'-':>6} {why:>14}   (teslalatplannerd not publishing)", flush=True)
       continue
 
     if time.monotonic() - last < 0.25:
@@ -52,7 +52,7 @@ def main():
     line += f"{sm['modelV2'].action.desiredCurvature:>+9.5f} {sm['carState'].vEgo:>5.1f} "
     line += f"{p.viewRange:>6.0f} {p.lookahead:>5.0f} {p.laneWidth:>6.2f} {p.c0:>+7.2f} "
     line += f"{p.lateralOffset:>+6.2f}  {engaged}"
-    print(line)
+    print(line, flush=True)
 
 
 if __name__ == "__main__":
