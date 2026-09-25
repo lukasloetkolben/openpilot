@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.params import Params
 from openpilot.selfdrive.locationd.calibrationd import HEIGHT_INIT
+from openpilot.selfdrive.ui.lib.tesla_lane_tint import lane_blend, tint_gradient, tint_stops
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.shader_polygon import draw_polygon, Gradient
@@ -28,15 +29,6 @@ NO_THROTTLE_COLORS = [
   rl.Color(242, 242, 242, 0),   # HSLF(112/360, 0.0, 0.95, 0.0)
 ]
 
-# Path turns blue while lateral control is coming from Tesla's own lane model
-# (teslaLanePlan) rather than the comma model. Tinted by the handoff blend, so the
-# colour crossfades exactly as control does.
-TESLA_LANE_COLOR = rl.Color(64, 160, 255, 255)
-TESLA_LANE_COLORS = [
-  rl.Color(64, 160, 255, 102),
-  rl.Color(94, 190, 255, 89),
-  rl.Color(94, 190, 255, 0),
-]
 
 
 @dataclass
@@ -292,16 +284,12 @@ class ModelRenderer(Widget):
     allow_throttle = sm['longitudinalPlan'].allowThrottle or not self._longitudinal_control
     self._blend_filter.update(int(allow_throttle))
 
-    tesla_blend = self._tesla_lane_blend(sm)
+    tesla_blend = lane_blend(sm)
 
     if self._experimental_mode:
       # Draw with acceleration coloring
       if len(self._exp_gradient.colors) > 1:
-        colors = self._exp_gradient.colors
-        if tesla_blend > 0.0:
-          # shift hue toward the Tesla colour, keeping each stop's own alpha
-          tinted = [rl.Color(TESLA_LANE_COLOR.r, TESLA_LANE_COLOR.g, TESLA_LANE_COLOR.b, c.a) for c in colors]
-          colors = self._blend_colors(colors, tinted, tesla_blend)
+        colors = tint_gradient(self._exp_gradient.colors, tesla_blend)
         gradient = Gradient(start=self._exp_gradient.start, end=self._exp_gradient.end,
                             colors=colors, stops=self._exp_gradient.stops)
         draw_polygon(self._rect, self._path.projected_points, gradient=gradient)
@@ -311,7 +299,7 @@ class ModelRenderer(Widget):
       # Blend throttle/no throttle colors based on transition
       blend_factor = round(self._blend_filter.x * 100) / 100
       blended_colors = self._blend_colors(NO_THROTTLE_COLORS, THROTTLE_COLORS, blend_factor)
-      blended_colors = self._blend_colors(blended_colors, TESLA_LANE_COLORS, tesla_blend)
+      blended_colors = tint_stops(blended_colors, tesla_blend)
       gradient = Gradient(
         start=(0.0, 1.0),  # Bottom of path
         end=(0.0, 0.0),  # Top of path
@@ -320,15 +308,6 @@ class ModelRenderer(Widget):
       )
       draw_polygon(self._rect, self._path.projected_points, gradient=gradient)
 
-  @staticmethod
-  def _tesla_lane_blend(sm) -> float:
-    """How much of the commanded curvature is coming from Tesla's lane model, 0..1."""
-    if 'teslaLanePlan' not in sm.data or not sm.valid['teslaLanePlan']:
-      return 0.0
-    plan = sm['teslaLanePlan']
-    if not plan.valid:
-      return 0.0
-    return float(np.clip(plan.blend, 0.0, 1.0))
 
   def _draw_lead_indicator(self):
     # Draw lead vehicles if available

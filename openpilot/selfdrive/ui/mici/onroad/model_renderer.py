@@ -11,6 +11,7 @@ from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.selfdrive.ui.mici.onroad import blend_colors
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.shader_polygon import draw_polygon, Gradient
+from openpilot.selfdrive.ui.lib.tesla_lane_tint import lane_blend, tint_gradient, tint_stops
 from openpilot.system.ui.widgets import Widget
 
 CLIP_MARGIN = 500
@@ -335,18 +336,26 @@ class ModelRenderer(Widget):
 
     path_pts = self._path.projected_points + np.array([self._rect.x, self._rect.y], dtype=np.float32)
 
+    # Blue while Tesla's lane model is steering instead of the comma model. The
+    # disengaged branches below keep priority: no tint when openpilot is not steering.
+    tesla_blend = lane_blend(sm)
+
     if self._experimental_mode:
       # Draw with acceleration coloring
       if ui_state.status == UIStatus.DISENGAGED:
         draw_polygon(self._rect, path_pts, rl.Color(0, 0, 0, 90))
       elif len(self._exp_gradient.colors) > 1:
-        draw_polygon(self._rect, path_pts, gradient=self._exp_gradient)
+        colors = tint_gradient(self._exp_gradient.colors, tesla_blend)
+        gradient = Gradient(start=self._exp_gradient.start, end=self._exp_gradient.end,
+                            colors=colors, stops=self._exp_gradient.stops)
+        draw_polygon(self._rect, path_pts, gradient=gradient)
       else:
         draw_polygon(self._rect, path_pts, rl.Color(255, 255, 255, 30))
     else:
       # Blend throttle/no throttle colors based on transition
       blend_factor = round(self._blend_filter.x * 100) / 100
       blended_colors = self._blend_colors(NO_THROTTLE_COLORS, THROTTLE_COLORS, blend_factor)
+      blended_colors = tint_stops(blended_colors, tesla_blend)
       gradient = Gradient(
         start=(0.0, 1.0),  # Bottom of path
         end=(0.0, 0.0),  # Top of path
