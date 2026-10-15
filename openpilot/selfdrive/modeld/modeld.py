@@ -2,9 +2,11 @@
 from collections.abc import Callable
 import base64
 import ctypes
+import gc
 from functools import cached_property
 import os
 os.environ['GMMU'] = '0' # for chestnut fast loading, noop for qcom
+os.environ.setdefault('AM_POWER_LIMIT', '100')
 from tinygrad.device import Buffer, Device
 from tinygrad.dtype import DType, dtypes
 from tinygrad.engine.realize import lower_and_compile
@@ -26,6 +28,7 @@ from msgq.visionipc import VisionIpcClient, VisionBuf
 from opendbc.car.car_helpers import get_demo_car_params
 from openpilot.common.swaglog import cloudlog
 from openpilot.common.params import Params
+from openpilot.common.hardware.usb import cable_connected
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import config_realtime_process, DT_MDL
 from openpilot.common.transformations.camera import DEVICE_CAMERAS
@@ -36,7 +39,7 @@ from openpilot.selfdrive.controls.lib.drive_helpers import get_accel_from_plan, 
 from openpilot.selfdrive.modeld.parse_model_outputs import Parser
 from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_driving_model_data, fill_pose_msg, PublishState
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
-from openpilot.selfdrive.modeld.helpers import MODELS_DIR, chestnut_present, chestnut_compiled, modeld_pkl_path, load_oob
+from openpilot.selfdrive.modeld.helpers import MODELS_DIR, chestnut_present, chestnut_compiled, modeld_pkl_path, load_oob, wait_for_chestnut
 
 SEND_RAW_PRED = os.getenv('SEND_RAW_PRED')
 
@@ -131,8 +134,8 @@ class FrameMeta:
 
 
 def input_view(buffer: Buffer, shape: tuple[int, ...], dtype: DType, offset: int) -> Tensor:
-  view = buffer.view(math.prod(shape), dtype, offset).ensure_allocated()
-  return Tensor(UOp.from_buffer(view)).reshape(shape)
+  view = buffer.view(math.prod(shape) * dtype.itemsize, offset).ensure_allocated()
+  return Tensor(UOp.from_buffer(view, dtype)).reshape(shape)
 
 
 class ModelState:
@@ -154,6 +157,7 @@ class ModelState:
     self.pack_inputs()
     with open(MODELS_DIR / f'{"big_" if chestnut else ""}driving_warp_{cam_w}x{cam_h}_tinygrad.pkl', 'rb') as f:
       self.run_warp = pickle.load(f)['run']
+    self.run_warp.captured._linear = lower_and_compile(self.run_warp.captured._linear)
     self.run_model = jits['run']
     self.run_model.captured._linear = lower_and_compile(self.run_model.captured._linear)
     self.outputs = {name: Tensor(np.zeros(shape, dtype=dtype), device=device).realize() for name, (shape, dtype, device) in jits['output_specs'].items()}
@@ -200,6 +204,8 @@ class ModelState:
     self.input_device.copy_from(self.input_host)
     self.input_queues['new_img'] = self.run_warp(**self.warp_inputs)
     self.run_model(output_buffers=self.outputs, **self.input_queues)
+    if self.chestnut and (err := Device[self.outputs['outputs'].device].error_state.host.view(fmt='q')[0]):
+      raise RuntimeError(f"chestnut failed with {err}")
     if after_enqueue is not None:
       after_enqueue()
     model_output = self.outputs['outputs'].numpy()[0]
@@ -225,14 +231,15 @@ class ModelState:
 def main(demo=False):
   cloudlog.warning("modeld init")
 
-  CHESTNUT = chestnut_present() and chestnut_compiled()
+  CHESTNUT = chestnut_compiled() and (chestnut_present() or cable_connected())
   if CHESTNUT:
-    os.environ['HCQDEV_WAIT_TIMEOUT_MS'] = '3000'
+    from tinygrad.runtime.ops_amd import AMDDevice
+    AMDDevice.wait_timeout_ms = 3000
   params = Params()
   params.put_bool("ChestnutLoading", CHESTNUT)
   params.remove("ChestnutActive")
 
-  config_realtime_process(7, 54)
+  gc.disable()
 
   # visionipc clients
   while True:
@@ -265,6 +272,7 @@ def main(demo=False):
     def load_big():
       nonlocal big_model
       try:
+        wait_for_chestnut()
         m = ModelState(vipc_client_main.width, vipc_client_main.height, True)
         m.warmup()
         big_model = m
@@ -274,7 +282,13 @@ def main(demo=False):
     loader.start()
     loader.join(BIG_MODEL_TIMEOUT)
     model = big_model
-    params.put_bool("ChestnutActive", model is not None)
+    if model is None and not params.get_bool("ChestnutRetry"):
+      # a crank can cut the chestnut power during the load, retry once with an onroad cycle
+      cloudlog.error("big model load failed, cycling onroad to retry")
+      params.put_bool("ChestnutRetry", True)
+      params.put_bool("OnroadCycleRequested", True)
+    else:
+      params.put_bool("ChestnutActive", model is not None)
 
   small_model = ModelState(vipc_client_main.width, vipc_client_main.height, False) if model is None or CHESTNUT else None
   if model is None:
@@ -282,10 +296,13 @@ def main(demo=False):
   params.put_bool("ChestnutLoading", False)
   cloudlog.warning(f"models loaded in {time.monotonic() - st:.1f}s, modeld starting")
 
+  config_realtime_process(7, 54)
+
   # messaging
   pub_socks = ["modelV2", "drivingModelData", "cameraOdometry"] + (["chestnutGpuState"] if CHESTNUT else [])
   pm = PubMaster(pub_socks)
-  sm = SubMaster(["deviceState", "carState", "narrowRoadCameraState", "extrinsicsCalibration", "driverMonitoringState", "carControl", "lateralDelay"])
+  sm = SubMaster(["deviceState", "carState", "narrowRoadCameraState", "extrinsicsCalibration", "driverMonitoringState",
+                  "carControl", "controlsState", "lateralDelay"])
 
   publish_state = PublishState()
   params = Params()
@@ -401,7 +418,7 @@ def main(demo=False):
                        run_count % round(ModelConstants.MODEL_RUN_FREQ / SERVICE_LIST['chestnutGpuState'].frequency) == 0)
       model_output = model.run(bufs, transforms, inputs, chestnut_state.send if send_chestnut else None)
     except Exception:
-      if not params.get_bool("ChestnutActive"):
+      if not model.chestnut:
         raise
       # fallback to small model
       cloudlog.exception("big model failed, fall back to small")
@@ -419,6 +436,8 @@ def main(demo=False):
       drivingdata_send = messaging.new_message('drivingModelData')
       posenet_send = messaging.new_message('cameraOdometry')
 
+      if not sm['carControl'].latActive:
+        prev_action.desiredCurvature = sm['controlsState'].curvature
       action = get_action_from_model(model_output, prev_action, lat_action_t, long_action_t, v_ego)
       prev_action = action
       fill_model_msg(modelv2_send, model_output, action,
