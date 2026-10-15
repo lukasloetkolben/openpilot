@@ -5,13 +5,12 @@ TeslaLanePlanner unit tests do not touch.
 """
 import time
 
-import pytest
-
 from opendbc.can import CANPacker
 from opendbc.car.structs import car
 from opendbc.car.tesla.values import CANBUS
 
 import openpilot.cereal.messaging as messaging
+from openpilot.common.test import OpenpilotTestCase
 from openpilot.selfdrive.controls.teslalatplannerd import TeslaLatPlannerD
 from openpilot.selfdrive.pandad import can_list_to_can_capnp
 
@@ -80,12 +79,11 @@ class Harness:
     return plan
 
 
-@pytest.fixture
 def harness():
   return Harness()
 
 
-class TestTeslaLatPlannerD:
+class TestTeslaLatPlannerD(OpenpilotTestCase):
   def test_does_not_require_unobservable_frequencies(self, harness):
     """Regression: the daemon ticks at 20Hz against conflated sockets, so it can never
     observe carState's 100Hz. Requiring that vetoed every frame on a real drive."""

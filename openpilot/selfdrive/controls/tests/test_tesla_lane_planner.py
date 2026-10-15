@@ -1,6 +1,7 @@
 import numpy as np
 
 from openpilot.common.realtime import DT_MDL
+from openpilot.common.test import OpenpilotTestCase
 from openpilot.selfdrive.controls.lib.tesla_lane_planner import (
   InvalidReason, MAX_C0, MIN_LOOKAHEAD, MIN_SPEED, MIN_VIEW_RANGE, STALE_TIME, TeslaLanePlanner,
 )
@@ -31,7 +32,7 @@ def run(planner, n, model_curvature=0.0, v_ego=V_EGO, lane_change=False, **kw):
   return plan
 
 
-class TestTeslaLanePlanner:
+class TestTeslaLanePlanner(OpenpilotTestCase):
   def test_straight_lane_is_zero_curvature(self):
     plan = run(TeslaLanePlanner(), 200)
     assert plan.valid
