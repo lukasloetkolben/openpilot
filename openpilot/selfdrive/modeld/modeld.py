@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from collections.abc import Callable
 import base64
+import contextlib
 import ctypes
 import gc
 from functools import cached_property
@@ -11,7 +12,7 @@ from tinygrad.device import Buffer, Device
 from tinygrad.dtype import DType, dtypes, _from_np_dtype
 from tinygrad.engine.realize import lower_and_compile
 from tinygrad.tensor import Tensor
-from tinygrad.helpers import round_up
+from tinygrad.helpers import Context, round_up
 from tinygrad.uop.ops import UOp
 import math
 import pickle
@@ -160,7 +161,10 @@ class ModelState:
       self.run_warp = pickle.load(f)['run']
     self.run_warp.captured._linear = lower_and_compile(self.run_warp.captured._linear)
     self.run_model = jits['run']
-    self.run_model.captured._linear = lower_and_compile(self.run_model.captured._linear)
+    # the nav big model was compiled with an older tinygrad whose CPU helper runtime rendered C,
+    # newer tinygrad defaults the helper runtime to LLVM, so compile its helpers with clang
+    with Context(HCQ_RUNTIME_DEV='CPU:CLANG') if chestnut else contextlib.nullcontext():
+      self.run_model.captured._linear = lower_and_compile(self.run_model.captured._linear)
     self.outputs = {name: Tensor(np.zeros(shape, dtype=dtype), device=device).realize() for name, (shape, dtype, device) in jits['output_specs'].items()}
     for name, next_name in self.state_pairs.items():
       state = self.input_queues[name]
