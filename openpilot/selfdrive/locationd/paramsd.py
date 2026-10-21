@@ -6,6 +6,7 @@ import capnp
 import openpilot.cereal.messaging as messaging
 from openpilot.cereal import log
 from opendbc.car.structs import car
+from opendbc.car.tesla.values import TeslaFlags
 from openpilot.common.params import Params
 from openpilot.common.realtime import config_realtime_process, DT_MDL
 from openpilot.selfdrive.locationd.models.car_kf import CarKalman, ObservationKind, States
@@ -47,6 +48,11 @@ class VehicleParamsLearner:
 
     self.calibrator = PoseCalibrator()
 
+    # Use the car's yaw rate sensor instead of the device gyro where it is known to be accurate.
+    # The gyro of some devices reads a few percent low, which makes the learned steer ratio too high.
+    self.use_car_yaw_rate = CP.brand == "tesla" and bool(CP.flags & TeslaFlags.HW4_GEN2)
+    self.car_yaw_rate = 0.0
+
     self.observed_speed = 0.0
     self.observed_yaw_rate = 0.0
     self.observed_roll = 0.0
@@ -70,6 +76,9 @@ class VehicleParamsLearner:
       calibrated_pose = self.calibrator.build_calibrated_pose(device_motion)
 
       yaw_rate, yaw_rate_std = calibrated_pose.angular_velocity.z, calibrated_pose.angular_velocity.z_std
+      if self.use_car_yaw_rate:
+        # carState yaw rate is positive to the left, the calibrated frame's z axis points down
+        yaw_rate = -self.car_yaw_rate
       yaw_rate_valid = msg.angularVelocityDevice.valid
       yaw_rate_valid = yaw_rate_valid and 0 < yaw_rate_std < 10  # rad/s
       yaw_rate_valid = yaw_rate_valid and abs(yaw_rate) < 1  # rad/s
@@ -117,6 +126,7 @@ class VehicleParamsLearner:
 
     elif which == 'carState':
       steering_angle = msg.steeringAngleDeg
+      self.car_yaw_rate = msg.yawRate
 
       in_linear_region = abs(steering_angle) < 45
       self.observed_speed = msg.vEgo
