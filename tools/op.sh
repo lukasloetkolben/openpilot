@@ -14,9 +14,9 @@ UNDERLINE='\033[4m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-SHELL_NAME="$(basename ${SHELL})"
-RC_FILE="${HOME}/.$(basename ${SHELL})rc"
-if [ "$(uname)" == "Darwin" ] && [ $SHELL == "/bin/bash" ]; then
+SHELL_NAME="$(basename "${SHELL}")"
+RC_FILE="${HOME}/.$(basename "${SHELL}")rc"
+if [ "$(uname)" == "Darwin" ] && [ "$SHELL" == "/bin/bash" ]; then
   RC_FILE="$HOME/.bash_profile"
 fi
 
@@ -73,12 +73,39 @@ function op_get_openpilot_dir() {
 
 function op_install_post_commit() {
   op_get_openpilot_dir
-  if [[ ! -d $OPENPILOT_ROOT/.git/hooks/post-commit.d ]]; then
-    mkdir $OPENPILOT_ROOT/.git/hooks/post-commit.d
-    mv $OPENPILOT_ROOT/.git/hooks/post-commit $OPENPILOT_ROOT/.git/hooks/post-commit.d 2>/dev/null || true
+  if [[ ! -d "$OPENPILOT_ROOT/.git/hooks/post-commit.d" ]]; then
+    mkdir "$OPENPILOT_ROOT/.git/hooks/post-commit.d"
+    mv "$OPENPILOT_ROOT/.git/hooks/post-commit" "$OPENPILOT_ROOT/.git/hooks/post-commit.d" 2>/dev/null || true
   fi
-  cd $OPENPILOT_ROOT/.git/hooks
+  cd "$OPENPILOT_ROOT/.git/hooks"
   ln -sf ../../scripts/post-commit post-commit
+}
+
+function op_lfs_shim() {
+  echo "$(git -C "$OPENPILOT_ROOT" rev-parse --path-format=absolute --git-common-dir)/git-lfs"
+}
+
+# the shim lives in the git dir so it works in every worktree and on every
+# branch, and survives the venv being rebuilt
+function op_install_lfs() {
+  local shim
+  shim="$(op_lfs_shim)"
+  cp "$OPENPILOT_ROOT/scripts/git-lfs" "$shim"
+  chmod +x "$shim"
+  git -C "$OPENPILOT_ROOT" config --local filter.lfs.clean "$shim clean -- %f"
+  git -C "$OPENPILOT_ROOT" config --local filter.lfs.smudge "$shim smudge -- %f"
+  git -C "$OPENPILOT_ROOT" config --local filter.lfs.process "$shim filter-process"
+  git -C "$OPENPILOT_ROOT" config --local filter.lfs.required false
+  local hooks
+  hooks="$(git -C "$OPENPILOT_ROOT" rev-parse --git-path hooks)"
+  printf '#!/bin/sh\nexec "%s" pre-push "$@"\n' "$shim" > "$hooks/pre-push"
+  chmod +x "$hooks/pre-push"
+  # stock hooks from "git lfs install" exit 2 without git-lfs on PATH, and we don't use lfs locks
+  for hook in post-checkout post-commit post-merge; do
+    if grep -qs "git lfs $hook" "$hooks/$hook"; then
+      rm "$hooks/$hook"
+    fi
+  done
 }
 
 function op_check_openpilot_dir() {
@@ -102,8 +129,14 @@ function op_check_git() {
     echo -e " ↳ [${GREEN}✔${NC}] git found."
   fi
 
-  echo "Checking for git lfs files..."
-  if [[ $(file -b $OPENPILOT_ROOT/openpilot/selfdrive/modeld/models/dmonitoring_model.onnx) == "data" ]]; then
+  echo "Checking for git lfs..."
+  if cmp -s "$OPENPILOT_ROOT/scripts/git-lfs" "$(op_lfs_shim)"; then
+    echo -e " ↳ [${GREEN}✔${NC}] git lfs shim installed."
+  else
+    echo -e " ↳ [${RED}✗${NC}] git lfs shim missing or outdated! Run 'op setup'"
+    return 1
+  fi
+  if [[ $(file -b "$OPENPILOT_ROOT/openpilot/selfdrive/modeld/models/dmonitoring_model.onnx") == "data" ]]; then
     echo -e " ↳ [${GREEN}✔${NC}] git lfs files found."
   else
     echo -e " ↳ [${RED}✗${NC}] git lfs files not found! Run 'git lfs pull'"
@@ -112,7 +145,7 @@ function op_check_git() {
 
   echo "Checking for git submodules..."
   for name in $(git config --file .gitmodules --get-regexp path | awk '{ print $2 }' | tr '\n' ' '); do
-    if [[ -z $(ls $OPENPILOT_ROOT/$name) ]]; then
+    if [[ -z $(ls "$OPENPILOT_ROOT/$name") ]]; then
       echo -e " ↳ [${RED}✗${NC}] git submodule $name not found! Run 'git submodule update --init --recursive'"
       return 1
     fi
@@ -123,23 +156,7 @@ function op_check_git() {
 function op_check_os() {
   echo "Checking for compatible os version..."
   if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-
-    if [ -f "/etc/os-release" ]; then
-      source /etc/os-release
-      case "$VERSION_CODENAME" in
-        "jammy" | "kinetic" | "noble" | "focal")
-          echo -e " ↳ [${GREEN}✔${NC}] Ubuntu $VERSION_CODENAME detected."
-          ;;
-        * )
-          echo -e " ↳ [${RED}✗${NC}] Incompatible Ubuntu version $VERSION_CODENAME detected!"
-          return 1
-          ;;
-      esac
-    else
-      echo -e " ↳ [${RED}✗${NC}] No /etc/os-release on your system. Make sure you're running on Ubuntu, or similar!"
-      return 1
-    fi
-
+    echo -e " ↳ [${GREEN}✔${NC}] Linux detected."
   elif [[ "$OSTYPE" == "darwin"* ]]; then
     echo -e " ↳ [${GREEN}✔${NC}] macOS detected."
   else
@@ -150,10 +167,10 @@ function op_check_os() {
 
 function op_check_venv() {
   echo "Checking for venv..."
-  if [[ -f $OPENPILOT_ROOT/.venv/bin/activate ]]; then
+  if [[ -f "$OPENPILOT_ROOT/.venv/bin/activate" ]]; then
     echo -e " ↳ [${GREEN}✔${NC}] venv detected."
   else
-    echo -e " ↳ [${RED}✗${NC}] Can't activate venv in $OPENPILOT_ROOT. Assuming global env!"
+    echo -e " ↳ [${RED}✗${NC}] Can't activate venv in '$OPENPILOT_ROOT'. Assuming global env!"
   fi
 }
 
@@ -163,7 +180,7 @@ function op_before_cmd() {
   fi
 
   op_get_openpilot_dir
-  cd $OPENPILOT_ROOT
+  cd "$OPENPILOT_ROOT"
 
   result="$((op_check_openpilot_dir ) 2>&1)" || (echo -e "$result" && return 1)
   result="${result}\n$(( op_check_git ) 2>&1)" || (echo -e "$result" && return 1)
@@ -192,7 +209,7 @@ EOF
   echo -e " ↳ [${GREEN}✔${NC}] op installed successfully. Open a new shell to use it."
 
   op_get_openpilot_dir
-  cd $OPENPILOT_ROOT
+  cd "$OPENPILOT_ROOT"
 
   op_check_openpilot_dir
   op_check_os
@@ -211,7 +228,7 @@ EOF
   echo "Installing dependencies..."
   st="$(date +%s)"
   SETUP_SCRIPT="tools/setup_dependencies.sh"
-  if ! $OPENPILOT_ROOT/$SETUP_SCRIPT; then
+  if ! "$OPENPILOT_ROOT/$SETUP_SCRIPT"; then
     echo -e " ↳ [${RED}✗${NC}] Dependencies installation failed!"
     return 1
   fi
@@ -220,9 +237,11 @@ EOF
 
   op_activate_venv
 
+  op_install_lfs
+
   echo "Pulling git lfs files..."
   st="$(date +%s)"
-  if ! retry 3 git lfs pull; then
+  if ! retry 3 "$(op_lfs_shim)" pull; then
     echo -e " ↳ [${RED}✗${NC}] Pulling git lfs files failed!"
     return 1
   fi
@@ -240,7 +259,7 @@ function op_auth() {
 function op_activate_venv() {
   # bash 3.2 can't handle this without the 'set +e'
   set +e
-  source $OPENPILOT_ROOT/.venv/bin/activate &> /dev/null || true
+  source "$OPENPILOT_ROOT/.venv/bin/activate" &> /dev/null || true
   set -e
 
   # persist venv on PATH across GitHub Actions steps
@@ -252,18 +271,18 @@ function op_activate_venv() {
 function op_venv() {
   op_before_cmd
 
-  if [[ ! -f $OPENPILOT_ROOT/.venv/bin/activate ]]; then
-    echo -e "No venv found in $OPENPILOT_ROOT"
+  if [[ ! -f "$OPENPILOT_ROOT/.venv/bin/activate" ]]; then
+    echo -e "No venv found in '$OPENPILOT_ROOT'"
     return 1
   fi
 
   case $SHELL_NAME in
     "zsh")
       ZSHRC_DIR=$(mktemp -d 2>/dev/null || mktemp -d -t 'tmp_zsh')
-      echo "source $RC_FILE; source $OPENPILOT_ROOT/.venv/bin/activate" >> $ZSHRC_DIR/.zshrc
+      echo "source \"$RC_FILE\"; source \"$OPENPILOT_ROOT/.venv/bin/activate\"" >> "$ZSHRC_DIR/.zshrc"
       ZDOTDIR=$ZSHRC_DIR zsh ;;
     *)
-      bash --rcfile <(echo "source $RC_FILE; source $OPENPILOT_ROOT/.venv/bin/activate") ;;
+      bash --rcfile <(echo "source \"$RC_FILE\"; source \"$OPENPILOT_ROOT/.venv/bin/activate\"") ;;
   esac
 }
 
@@ -349,6 +368,11 @@ function op_clip() {
   op_run_command openpilot/tools/clip/run.py "$@"
 }
 
+function op_docs() {
+  op_before_cmd
+  op_run_command python docs/serve.py "$@"
+}
+
 function op_check_agnos_update() {
   if [[ ! -f "/AGNOS" ]]; then
     return 0
@@ -410,14 +434,14 @@ function op_start() {
   if [[ -f "/AGNOS" ]]; then
     op_before_cmd
     op_check_agnos_update
-    op_run_command sudo systemctl restart comma $@
+    op_run_command sudo systemctl restart comma "$@"
   fi
 }
 
 function op_stop() {
   if [[ -f "/AGNOS" ]]; then
     op_before_cmd
-    op_run_command sudo systemctl stop comma $@
+    op_run_command sudo systemctl stop comma "$@"
   fi
 }
 
@@ -447,6 +471,7 @@ function op_default() {
   echo -e "  ${BOLD}replay${NC}       Run Replay"
   echo -e "  ${BOLD}cabana${NC}       Run Cabana"
   echo -e "  ${BOLD}clip${NC}         Run clip (linux only)"
+  echo -e "  ${BOLD}docs${NC}         Build or serve the openpilot documentation"
   echo -e "  ${BOLD}adb${NC}          Run adb shell"
   echo -e "  ${BOLD}ssh${NC}          comma prime SSH helper"
   echo ""
@@ -502,6 +527,7 @@ function _op() {
     test )          shift 1; op_test "$@" ;;
     replay )        shift 1; op_replay "$@" ;;
     clip )          shift 1; op_clip "$@" ;;
+    docs )          shift 1; op_docs "$@" ;;
     sim )           shift 1; op_sim "$@" ;;
     switch )        shift 1; op_switch "$@" ;;
     start )         shift 1; op_start "$@" ;;
