@@ -30,9 +30,10 @@ class VehicleParamsLearner:
   def __init__(self, CP: car.CarParams, steer_ratio: float, stiffness_factor: float, angle_offset: float, P_initial: np.ndarray | None = None):
     self.kf = CarKalman(GENERATED_DIR)
 
+    # Fixed steer ratio and stiffness, measured on this Model Y; angle offset and roll are still learned
     self.x_initial = CarKalman.initial_x.copy()
-    self.x_initial[States.STEER_RATIO] = steer_ratio
-    self.x_initial[States.STIFFNESS] = stiffness_factor
+    self.x_initial[States.STEER_RATIO] = 14.0
+    self.x_initial[States.STIFFNESS] = 1.0
     self.x_initial[States.ANGLE_OFFSET] = angle_offset
     self.P_initial = P_initial if P_initial is not None else CarKalman.P_initial
 
@@ -113,13 +114,10 @@ class VehicleParamsLearner:
                                       np.array([np.atleast_2d(roll_std**2)]))
         self.kf.predict_and_observe(t, ObservationKind.ANGLE_OFFSET_FAST, np.array([[0]]))
 
-        # We observe the current stiffness and steer ratio (with a high observation noise) to bound
-        # the respective estimate STD. Otherwise the STDs keep increasing, causing rapid changes in the
-        # states in longer routes (especially straight stretches).
-        stiffness = float(self.kf.x[States.STIFFNESS].item())
-        steer_ratio = float(self.kf.x[States.STEER_RATIO].item())
-        self.kf.predict_and_observe(t, ObservationKind.STIFFNESS, np.array([[stiffness]]))
-        self.kf.predict_and_observe(t, ObservationKind.STEER_RATIO, np.array([[steer_ratio]]))
+        # Pin stiffness and steer ratio with an observation noise far below the process noise
+        fixed_R = np.array([np.atleast_2d(1e-3**2)])
+        self.kf.predict_and_observe(t, ObservationKind.STIFFNESS, np.array([[1.0]]), fixed_R)
+        self.kf.predict_and_observe(t, ObservationKind.STEER_RATIO, np.array([[14.0]]), fixed_R)
 
     elif which == 'extrinsicsCalibration':
       self.calibrator.feed_extrinsics_calibration(msg)

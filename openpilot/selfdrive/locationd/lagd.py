@@ -182,7 +182,7 @@ class LateralLagEstimator:
     self.window_sec = window_sec
     self.okay_window_sec = okay_window_sec
     self.min_recovery_buffer_sec = min_recovery_buffer_sec
-    self.initial_lag = CP.steerActuatorDelay + 0.2
+    self.initial_lag = 0.175  # fixed, measured on this Model Y from desired curvature to gyro yaw rate
     self.block_size = block_size
     self.block_count = block_count
     self.min_valid_block_count = min_valid_block_count
@@ -396,10 +396,6 @@ def main():
   CP = messaging.log_from_bytes(params.get("CarParams", block=True), car.CarParams)
 
   lag_learner = LateralLagEstimator(CP, 1. / SERVICE_LIST['deviceMotion'].frequency)
-  if (initial_lag_params := retrieve_initial_lag(params, CP)) is not None:
-    lag, valid_blocks = initial_lag_params
-    lag_learner.reset(lag, valid_blocks)
-
   while True:
     sm.update()
     if sm.all_checks():
@@ -411,7 +407,6 @@ def main():
 
     # 4Hz driven by deviceMotion
     if sm.frame % 5 == 0:
-      lag_learner.update_estimate()
       lag_msg = lag_learner.get_msg(sm.all_checks(), DEBUG)
       lag_msg_dat = lag_msg.to_bytes()
       pm.send('lateralDelay', lag_msg_dat)
