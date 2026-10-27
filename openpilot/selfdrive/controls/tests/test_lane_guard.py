@@ -55,8 +55,21 @@ class TestLaneGuard(OpenpilotTestCase):
     car_y = -(1.3 - CAR_HALF_WIDTH + 0.05)
     assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, left_prob=0.3)) == 0.0
 
-  def test_ignores_implausible_lane_width(self):
-    assert settle(LaneGuard(), make_model(-1.0, lane_width=5.0)) == 0.0
+  def test_line_hysteresis(self):
+    car_y = -(1.3 - CAR_HALF_WIDTH + 0.05)
+    assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, left_prob=0.65)) == 0.0
+    guard = LaneGuard()
+    settle(guard, make_model(car_y, lane_width=2.6, left_prob=0.8))
+    assert settle(guard, make_model(car_y, lane_width=2.6, left_prob=0.65)) > 0.0
+    assert settle(guard, make_model(car_y, lane_width=2.6, left_prob=0.55)) == 0.0
+
+  def test_ignores_too_narrow_lane(self):
+    assert settle(LaneGuard(), make_model(-0.3, lane_width=1.9)) == 0.0
+
+  def test_wide_lane_guards_right_line_only(self):
+    # no center line, the left line is the far road edge
+    assert settle(LaneGuard(), make_model(-(2.5 - CAR_HALF_WIDTH + 0.05), lane_width=5.0)) == 0.0
+    assert settle(LaneGuard(), make_model(2.5 - CAR_HALF_WIDTH + 0.05, lane_width=5.0)) < 0.0
 
   def test_off_during_and_after_lane_change(self):
     guard = LaneGuard()
