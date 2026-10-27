@@ -260,6 +260,8 @@ SConscript(['msgq_repo/SConscript'])
 
 SConscript(['openpilot/cereal/SConscript'])
 
+SConscript(['opendbc_repo/opendbc/can/SConscript'])
+
 Import('socketmaster', 'msgq')
 messaging = [socketmaster, msgq, 'capnp', 'kj',]
 Export('messaging')
