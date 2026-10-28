@@ -23,7 +23,7 @@ MIN_LANE_WIDTH = 2.0  # m, narrower is a misdetection, the car does not fit
 MAX_LANE_WIDTH = 4.5  # m, wider is a missing center line, a merge, an exit or a shoulder, only the right line is guarded
 MAX_LAT_ACCEL = 1.0  # m/s^2
 MAX_LAT_JERK = 4.0  # m/s^3
-LANE_CHANGE_COOLDOWN = 1.0  # s, off this long after a lane change or the blinker, lines are reassigned after a lane change
+LANE_CHANGE_COOLDOWN = 1.0  # s, lines are unguarded this long after a lane change or the blinker, they are reassigned after a lane change
 MIN_CURVE = 1 / 2000.  # 1/m, lane lines are only guarded in curves, where the model cuts them
 LANE_CURVE_T = 2.5  # s, how far ahead the lane curvature is measured
 
@@ -87,7 +87,7 @@ class LaneGuard:
     self.line_valid = [False, False]  # left, right
 
   def update(self, v_ego, model_v2, active, blinker=False):
-    # a blinker means the driver is about to leave the lane, also below the lane change speed
+    # a blinker means the driver is about to leave the lane, also below the lane change speed. Road edges stay guarded.
     if blinker or model_v2.meta.laneChangeState != LaneChangeState.off:
       self.lane_change_timer = LANE_CHANGE_COOLDOWN
     else:
@@ -103,7 +103,7 @@ class LaneGuard:
       self.line_valid = [False, False]
 
     road_edges = model_v2.roadEdges
-    if active and v_ego > MIN_SPEED and self.lane_change_timer == 0.0 and len(model_v2.position.x) == ModelConstants.IDX_N and \
+    if active and v_ego > MIN_SPEED and len(model_v2.position.x) == ModelConstants.IDX_N and \
        len(lane_lines) == 4 and len(model_v2.laneLineStds) == 4 and len(road_edges) == 2 and len(model_v2.roadEdgeStds) == 2:
       left, right = ((lane_lines[idx].x, lane_lines[idx].y) if self.line_valid[i] else None for i, idx in enumerate((1, 2)))
       left_edge, right_edge = ((edge.x, edge.y) if std < MAX_EDGE_STD else None for edge, std in zip(road_edges, model_v2.roadEdgeStds, strict=True))

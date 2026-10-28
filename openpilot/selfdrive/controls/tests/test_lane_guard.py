@@ -75,6 +75,11 @@ class TestLaneGuard(OpenpilotTestCase):
       assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, curve=curve, edge=0.1, left_prob=prob, right_prob=prob)) < 0.0
       assert settle(LaneGuard(), make_model(-car_y, lane_width=2.6, curve=curve, edge=0.1, left_prob=prob, right_prob=prob)) > 0.0
 
+  def test_road_edge_guarded_with_blinker_and_lane_change(self):
+    car_y = 1.3 + 0.1 - CAR_HALF_WIDTH + 0.05
+    assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, edge=0.1), blinker=True) < 0.0
+    assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, edge=0.1, lane_change=LaneChangeState.laneChangeStarting)) < 0.0
+
   def test_ignores_unsure_road_edge(self):
     car_y = 1.3 + 0.1 - CAR_HALF_WIDTH + 0.05
     assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, curve=0.0, edge=0.1, edge_std=1.5)) == 0.0
