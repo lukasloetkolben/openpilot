@@ -80,6 +80,13 @@ class TestLaneGuard(OpenpilotTestCase):
     assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, edge=0.1), blinker=True) < 0.0
     assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, edge=0.1, lane_change=LaneChangeState.laneChangeStarting)) < 0.0
 
+  def test_road_edge_ignores_far_crossing(self):
+    # a turn whose plan only crosses the edge 2 s ahead, where the edge often runs straight on past the junction
+    md = make_model(lane_width=2.6, curve=0.0, edge=0.5)
+    path_x = np.array(md.position.x)
+    md.position.y = (np.array(md.position.y) + 0.0006 * path_x ** 2).tolist()
+    assert settle(LaneGuard(), md) == 0.0
+
   def test_ignores_unsure_road_edge(self):
     car_y = 1.3 + 0.1 - CAR_HALF_WIDTH + 0.05
     assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, curve=0.0, edge=0.1, edge_std=1.5)) == 0.0

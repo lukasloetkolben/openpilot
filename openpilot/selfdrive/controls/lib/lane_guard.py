@@ -19,6 +19,7 @@ MIN_LINE_PROB = 0.7
 MIN_LINE_PROB_KEEP = 0.6  # once trusted, a line stays trusted down to this
 MAX_LINE_STD = 0.3  # m
 MAX_EDGE_STD = 1.0  # m
+MAX_EDGE_T = 1.5  # s, the edge 2 s ahead often runs straight on past a junction the model turns into
 MIN_LANE_WIDTH = 2.0  # m, narrower is a misdetection, the car does not fit
 MAX_LANE_WIDTH = 4.5  # m, wider is a missing center line, a merge, an exit or a shoulder, only the right line is guarded
 MAX_LAT_ACCEL = 1.0  # m/s^2
@@ -47,8 +48,9 @@ def get_lane_guard_curvature(v_ego, path_x, path_y, left, right, left_edge, righ
   for t in LOOKAHEAD_T:
     x = np.interp(t, ModelConstants.T_IDXS, path_x)
     car_y = np.interp(t, ModelConstants.T_IDXS, path_y) - CAMERA_OFFSET
-    gaps_left = [(car_y - CAR_HALF_WIDTH) - np.interp(x, *left_edge)] if left_edge is not None else []
-    gaps_right = [np.interp(x, *right_edge) - (car_y + CAR_HALF_WIDTH)] if right_edge is not None else []
+    near = t <= MAX_EDGE_T
+    gaps_left = [(car_y - CAR_HALF_WIDTH) - np.interp(x, *left_edge)] if left_edge is not None and near else []
+    gaps_right = [np.interp(x, *right_edge) - (car_y + CAR_HALF_WIDTH)] if right_edge is not None and near else []
     if curve:
       right_y = np.interp(x, *right)
       if left is None:
