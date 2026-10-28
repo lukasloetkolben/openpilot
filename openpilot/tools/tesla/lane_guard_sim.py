@@ -51,7 +51,7 @@ def load(route, cache):
   if cache and os.path.exists(cache):
     return np.load(cache)
   with Pool(8) as p:
-    data = np.concatenate(p.map(read_segment, Route(route).log_paths()))
+    data = np.concatenate(p.map(read_segment, [path for path in Route(route).log_paths() if path]))
   if cache:
     np.save(cache, data)
   return data
