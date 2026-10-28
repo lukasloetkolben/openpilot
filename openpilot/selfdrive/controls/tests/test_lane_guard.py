@@ -2,17 +2,18 @@ import numpy as np
 
 from openpilot.cereal import log
 from openpilot.common.test import OpenpilotTestCase
-from openpilot.selfdrive.controls.lib.lane_guard import CAR_HALF_WIDTH, LANE_CHANGE_COOLDOWN, MAX_LAT_ACCEL, MAX_LAT_JERK, MAX_LEFT_LAT_ACCEL, \
-                                                          LaneGuard
+from openpilot.selfdrive.controls.lib.lane_guard import CAR_HALF_WIDTH, LANE_CHANGE_COOLDOWN, MAX_LAT_ACCEL, MAX_LAT_JERK, LaneGuard
 from openpilot.selfdrive.controls.lib.ldw import CAMERA_OFFSET
 from openpilot.selfdrive.modeld.constants import ModelConstants
 
 V_EGO = 20.0
+CURVE = 1 / 500.  # 1/m, lane lines are only guarded in curves
 LaneChangeState = log.LaneChangeState
 
 
-def make_model(car_y=0.0, lane_width=3.0, left_prob=0.9, right_prob=0.9, lane_change=LaneChangeState.off, curve=0.0):
-  # lane centered on the car with curvature curve (1/m, positive right), planned path held at car_y (car center, m to the right)
+def make_model(car_y=0.0, lane_width=3.0, left_prob=0.9, right_prob=0.9, lane_change=LaneChangeState.off, curve=CURVE, edge=1.0, edge_std=0.2):
+  # lane centered on the car with curvature curve (1/m, positive right), planned path held at car_y (car center, m to the right),
+  # road edges edge (m) outside the lane lines
   md = log.ModelDataV2.new_message()
   path_x = V_EGO * np.array(ModelConstants.T_IDXS)
   md.position.x = path_x.tolist()
@@ -24,6 +25,11 @@ def make_model(car_y=0.0, lane_width=3.0, left_prob=0.9, right_prob=0.9, lane_ch
     lane_lines[i].y = (y + curve / 2 * line_x ** 2).tolist()
   md.laneLineProbs = [0.5, left_prob, right_prob, 0.5]
   md.laneLineStds = [0.1] * 4
+  road_edges = md.init('roadEdges', 2)
+  for i, y in enumerate((-lane_width / 2 - edge, lane_width / 2 + edge)):
+    road_edges[i].x = line_x.tolist()
+    road_edges[i].y = (y + curve / 2 * line_x ** 2).tolist()
+  md.roadEdgeStds = [edge_std] * 2
   md.meta.laneChangeState = lane_change
   return md
 
@@ -54,16 +60,29 @@ class TestLaneGuard(OpenpilotTestCase):
     car_y = -(1.3 - CAR_HALF_WIDTH + 0.10)
     assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, right_prob=0.3)) == 0.0
 
-  def test_left_line_gentle_outside_left_curves(self):
-    car_y = -(1.3 - CAR_HALF_WIDTH + 0.5)
-    straight = settle(LaneGuard(), make_model(car_y, lane_width=2.6))
-    left_curve = settle(LaneGuard(), make_model(car_y, lane_width=2.6, curve=-1 / 300))
-    assert 0.0 < straight <= MAX_LEFT_LAT_ACCEL / V_EGO ** 2 + 1e-12
-    assert left_curve > 2 * straight
+  def test_lines_unguarded_on_straights(self):
+    # the model leaves the lane on purpose there, e.g. into a bike lane to make room for oncoming traffic
+    car_y = 1.3 - CAR_HALF_WIDTH + 0.3
+    assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, curve=0.0)) == 0.0
+    assert settle(LaneGuard(), make_model(-car_y, lane_width=2.6, curve=0.0)) == 0.0
+    assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, curve=-CURVE)) < 0.0
+    assert settle(LaneGuard(), make_model(-car_y, lane_width=2.6, curve=-CURVE)) > 0.0
+
+  def test_road_edge_always_guarded(self):
+    # body 5 cm over the road edge, on a straight and without trusted lane lines
+    car_y = 1.3 + 0.1 - CAR_HALF_WIDTH + 0.05
+    for curve, prob in ((0.0, 0.9), (CURVE, 0.1)):
+      assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, curve=curve, edge=0.1, left_prob=prob, right_prob=prob)) < 0.0
+      assert settle(LaneGuard(), make_model(-car_y, lane_width=2.6, curve=curve, edge=0.1, left_prob=prob, right_prob=prob)) > 0.0
+
+  def test_ignores_unsure_road_edge(self):
+    car_y = 1.3 + 0.1 - CAR_HALF_WIDTH + 0.05
+    assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, curve=0.0, edge=0.1, edge_std=1.5)) == 0.0
 
   def test_narrow_lane_centered(self):
     # both margins overlap, the pushes from both lines cancel when centered
-    assert abs(settle(LaneGuard(), make_model(lane_width=2.1))) < 1e-9
+    # up to interpolating the curved path and lines on their different grids
+    assert abs(settle(LaneGuard(), make_model(lane_width=2.1))) < 0.02 / V_EGO ** 2
     assert settle(LaneGuard(), make_model(-0.05, lane_width=2.1)) > 0.0
 
   def test_ignores_unsure_line(self):
