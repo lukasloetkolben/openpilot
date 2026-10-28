@@ -125,7 +125,8 @@ class Controls:
     # Reset desired curvature to current to avoid violating the limits on engage
     if self.sm.frame % int(1. / DT_CTRL) == 0:
       self.lane_guard_enabled = self.params.get_bool("LaneGuardEnabled")
-    lane_guard_curvature = self.lane_guard.update(CS.vEgo, model_v2, self.lane_guard_enabled and CC.latActive and not CS.steeringPressed)
+    lane_guard_curvature = self.lane_guard.update(CS.vEgo, model_v2, self.lane_guard_enabled and CC.latActive and not CS.steeringPressed,
+                                                  CS.leftBlinker or CS.rightBlinker)
     if self.sm.valid['lateralManeuverPlan']:
       new_desired_curvature = self.sm['lateralManeuverPlan'].desiredCurvature if CC.latActive else self.curvature
     else:

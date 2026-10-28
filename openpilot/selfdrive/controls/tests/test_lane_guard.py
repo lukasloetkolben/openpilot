@@ -28,9 +28,9 @@ def make_model(car_y=0.0, lane_width=3.0, left_prob=0.9, right_prob=0.9, lane_ch
   return md
 
 
-def settle(guard, md, active=True, steps=500):
+def settle(guard, md, active=True, steps=500, blinker=False):
   for _ in range(steps):
-    curvature = guard.update(V_EGO, md, active)
+    curvature = guard.update(V_EGO, md, active, blinker)
   return curvature
 
 
@@ -90,6 +90,15 @@ class TestLaneGuard(OpenpilotTestCase):
     guard = LaneGuard()
     car_y = -(1.3 - CAR_HALF_WIDTH + 0.05)
     assert settle(guard, make_model(car_y, lane_width=2.6, lane_change=LaneChangeState.laneChangeStarting)) == 0.0
+    steps = int(LANE_CHANGE_COOLDOWN / guard.dt) - 1
+    assert settle(guard, make_model(car_y, lane_width=2.6), steps=steps) == 0.0
+    assert settle(guard, make_model(car_y, lane_width=2.6)) > 0.0
+
+  def test_off_with_blinker_and_after(self):
+    # the blinker alone pauses it, e.g. below the lane change speed where laneChangeState stays off
+    guard = LaneGuard()
+    car_y = -(1.3 - CAR_HALF_WIDTH + 0.05)
+    assert settle(guard, make_model(car_y, lane_width=2.6), blinker=True) == 0.0
     steps = int(LANE_CHANGE_COOLDOWN / guard.dt) - 1
     assert settle(guard, make_model(car_y, lane_width=2.6), steps=steps) == 0.0
     assert settle(guard, make_model(car_y, lane_width=2.6)) > 0.0

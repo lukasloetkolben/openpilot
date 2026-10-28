@@ -22,7 +22,7 @@ MIN_LANE_WIDTH = 2.0  # m, narrower is a misdetection, the car does not fit
 MAX_LANE_WIDTH = 4.5  # m, wider is a missing center line, a merge, an exit or a shoulder, only the right line is guarded
 MAX_LAT_ACCEL = 1.0  # m/s^2
 MAX_LAT_JERK = 4.0  # m/s^3
-LANE_CHANGE_COOLDOWN = 1.0  # s, lines are reassigned after a lane change
+LANE_CHANGE_COOLDOWN = 1.0  # s, off this long after a lane change or the blinker, lines are reassigned after a lane change
 MIN_LEFT_CURVE = 1 / 1000.  # 1/m, left curves tighter than this get the full push away from the left line, the model cuts it there
 MAX_LEFT_LAT_ACCEL = 0.2  # m/s^2, push away from the left line everywhere else, weak enough for the model to pass parked cars
 LANE_CURVE_T = 2.5  # s, how far ahead the lane curvature is measured
@@ -79,8 +79,9 @@ class LaneGuard:
     self.lane_change_timer = 0.0
     self.line_valid = [False, False]  # left, right
 
-  def update(self, v_ego, model_v2, active):
-    if model_v2.meta.laneChangeState != LaneChangeState.off:
+  def update(self, v_ego, model_v2, active, blinker=False):
+    # a blinker means the driver is about to leave the lane, also below the lane change speed
+    if blinker or model_v2.meta.laneChangeState != LaneChangeState.off:
       self.lane_change_timer = LANE_CHANGE_COOLDOWN
     else:
       self.lane_change_timer = max(self.lane_change_timer - self.dt, 0.0)
