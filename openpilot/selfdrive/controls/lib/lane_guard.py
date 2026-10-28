@@ -36,13 +36,14 @@ def get_lane_curvature(v_ego, lines):
   return 2 * np.polyfit(xs, center, 2)[0]
 
 
-def get_lane_guard_curvature(v_ego, path_x, path_y, left, right, left_edge, right_edge):
+def get_lane_guard_curvature(v_ego, path_x, path_y, left, right, left_edge, right_edge, left_hand_traffic=False):
   # left, right, left_edge, right_edge are (x, y) or None when not trusted.
   # On straights the model leaves the lane on purpose, to pass parked cars or make room in a bike lane for oncoming traffic,
-  # so lane lines are only guarded in curves. Without the right line, the left one is often only the imagined middle of the
-  # road and is not guarded. Road edges are always guarded.
+  # so lane lines are only guarded in curves. Without the curb line (right, left in left-hand traffic), the other one is often
+  # only the imagined middle of the road and is not guarded. Road edges are always guarded.
   lines = [line for line in (left, right) if line is not None]
-  curve = right is not None and abs(get_lane_curvature(v_ego, lines)) > MIN_CURVE
+  curb = left if left_hand_traffic else right
+  curve = curb is not None and abs(get_lane_curvature(v_ego, lines)) > MIN_CURVE
 
   curvature = 0.0
   for t in LOOKAHEAD_T:
@@ -52,16 +53,15 @@ def get_lane_guard_curvature(v_ego, path_x, path_y, left, right, left_edge, righ
     gaps_left = [(car_y - CAR_HALF_WIDTH) - np.interp(x, *left_edge)] if left_edge is not None and near else []
     gaps_right = [np.interp(x, *right_edge) - (car_y + CAR_HALF_WIDTH)] if right_edge is not None and near else []
     if curve:
-      right_y = np.interp(x, *right)
-      if left is None:
-        gaps_right.append(right_y - (car_y + CAR_HALF_WIDTH))
-      else:
-        left_y = np.interp(x, *left)
-        if right_y - left_y >= MIN_LANE_WIDTH:
-          gaps_right.append(right_y - (car_y + CAR_HALF_WIDTH))
-          # without a center line the left line is often the far road edge, keep guarding the right line (right-hand traffic)
-          if right_y - left_y < MAX_LANE_WIDTH:
-            gaps_left.append((car_y - CAR_HALF_WIDTH) - left_y)
+      left_gap = (car_y - CAR_HALF_WIDTH) - np.interp(x, *left) if left is not None else None
+      right_gap = np.interp(x, *right) - (car_y + CAR_HALF_WIDTH) if right is not None else None
+      lane_width = left_gap + right_gap + 2 * CAR_HALF_WIDTH if left is not None and right is not None else None
+      if lane_width is None or lane_width >= MIN_LANE_WIDTH:
+        # without a center line the far line is often the other road edge, keep guarding the curb line
+        if left_gap is not None and (left_hand_traffic or lane_width < MAX_LANE_WIDTH):
+          gaps_left.append(left_gap)
+        if right_gap is not None and (not left_hand_traffic or lane_width < MAX_LANE_WIDTH):
+          gaps_right.append(right_gap)
 
     # Getting closer than MARGIN pushes away, and the part over the line counts twice.
     # pure pursuit: curvature that moves the path by push at distance x
@@ -88,7 +88,7 @@ class LaneGuard:
     self.lane_change_timer = 0.0
     self.line_valid = [False, False]  # left, right
 
-  def update(self, v_ego, model_v2, active, blinker=False):
+  def update(self, v_ego, model_v2, active, blinker=False, left_hand_traffic=False):
     # a blinker means the driver is about to leave the lane, also below the lane change speed. Road edges stay guarded.
     if blinker or model_v2.meta.laneChangeState != LaneChangeState.off:
       self.lane_change_timer = LANE_CHANGE_COOLDOWN
@@ -109,7 +109,7 @@ class LaneGuard:
        len(lane_lines) == 4 and len(model_v2.laneLineStds) == 4 and len(road_edges) == 2 and len(model_v2.roadEdgeStds) == 2:
       left, right = ((lane_lines[idx].x, lane_lines[idx].y) if self.line_valid[i] else None for i, idx in enumerate((1, 2)))
       left_edge, right_edge = ((edge.x, edge.y) if std < MAX_EDGE_STD else None for edge, std in zip(road_edges, model_v2.roadEdgeStds, strict=True))
-      target = get_lane_guard_curvature(v_ego, model_v2.position.x, model_v2.position.y, left, right, left_edge, right_edge)
+      target = get_lane_guard_curvature(v_ego, model_v2.position.x, model_v2.position.y, left, right, left_edge, right_edge, left_hand_traffic)
 
     max_change = MAX_LAT_JERK / max(v_ego, MIN_SPEED) ** 2 * self.dt
     self.curvature = float(np.clip(target, self.curvature - max_change, self.curvature + max_change))

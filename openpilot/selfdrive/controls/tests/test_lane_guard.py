@@ -34,9 +34,9 @@ def make_model(car_y=0.0, lane_width=3.0, left_prob=0.9, right_prob=0.9, lane_ch
   return md
 
 
-def settle(guard, md, active=True, steps=500, blinker=False):
+def settle(guard, md, active=True, steps=500, blinker=False, left_hand_traffic=False):
   for _ in range(steps):
-    curvature = guard.update(V_EGO, md, active, blinker)
+    curvature = guard.update(V_EGO, md, active, blinker, left_hand_traffic)
   return curvature
 
 
@@ -116,6 +116,17 @@ class TestLaneGuard(OpenpilotTestCase):
     # no center line, the left line is the far road edge
     assert settle(LaneGuard(), make_model(-(2.5 - CAR_HALF_WIDTH + 0.05), lane_width=5.0)) == 0.0
     assert settle(LaneGuard(), make_model(2.5 - CAR_HALF_WIDTH + 0.05, lane_width=5.0)) < 0.0
+
+  def test_left_hand_traffic_mirrors_curb_line(self):
+    # the curb line is on the left: a lone right line is the imagined middle of the road, a lone left line is guarded
+    car_y = 1.3 - CAR_HALF_WIDTH + 0.10
+    assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, left_prob=0.3), left_hand_traffic=True) == 0.0
+    assert settle(LaneGuard(), make_model(-car_y, lane_width=2.6, right_prob=0.3), left_hand_traffic=True) > 0.0
+    # a wide lane guards only the left line
+    assert settle(LaneGuard(), make_model(2.5 - CAR_HALF_WIDTH + 0.05, lane_width=5.0), left_hand_traffic=True) == 0.0
+    assert settle(LaneGuard(), make_model(-(2.5 - CAR_HALF_WIDTH + 0.05), lane_width=5.0), left_hand_traffic=True) > 0.0
+    # a normal lane still guards both lines
+    assert settle(LaneGuard(), make_model(car_y, lane_width=2.6), left_hand_traffic=True) < 0.0
 
   def test_off_during_and_after_lane_change(self):
     guard = LaneGuard()

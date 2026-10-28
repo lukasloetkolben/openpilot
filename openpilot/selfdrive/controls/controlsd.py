@@ -53,6 +53,7 @@ class Controls:
 
     self.lane_guard = LaneGuard()
     self.lane_guard_enabled = self.params.get_bool("LaneGuardEnabled")
+    self.left_hand_traffic = self.params.get_bool("IsRhdDetected")  # a right-hand drive car most likely drives on the left
     self.LoC = LongControl(self.CP)
     self.VM = VehicleModel(self.CP)
     self.LaC: LatControl
@@ -125,8 +126,9 @@ class Controls:
     # Reset desired curvature to current to avoid violating the limits on engage
     if self.sm.frame % int(1. / DT_CTRL) == 0:
       self.lane_guard_enabled = self.params.get_bool("LaneGuardEnabled")
+      self.left_hand_traffic = self.params.get_bool("IsRhdDetected")
     lane_guard_curvature = self.lane_guard.update(CS.vEgo, model_v2, self.lane_guard_enabled and CC.latActive and not CS.steeringPressed,
-                                                  CS.leftBlinker or CS.rightBlinker)
+                                                  CS.leftBlinker or CS.rightBlinker, self.left_hand_traffic)
     if self.sm.valid['lateralManeuverPlan']:
       new_desired_curvature = self.sm['lateralManeuverPlan'].desiredCurvature if CC.latActive else self.curvature
     else:
