@@ -2,7 +2,8 @@ import numpy as np
 
 from openpilot.cereal import log
 from openpilot.common.test import OpenpilotTestCase
-from openpilot.selfdrive.controls.lib.lane_guard import CAR_HALF_WIDTH, LANE_CHANGE_COOLDOWN, MAX_LAT_ACCEL, MAX_LAT_JERK, LaneGuard
+from openpilot.selfdrive.controls.lib.lane_guard import CAR_HALF_WIDTH, LANE_CHANGE_COOLDOWN, MAX_LAT_ACCEL, MAX_LAT_JERK, MAX_LEFT_LAT_ACCEL, \
+                                                          LaneGuard
 from openpilot.selfdrive.controls.lib.ldw import CAMERA_OFFSET
 from openpilot.selfdrive.modeld.constants import ModelConstants
 
@@ -10,15 +11,17 @@ V_EGO = 20.0
 LaneChangeState = log.LaneChangeState
 
 
-def make_model(car_y=0.0, lane_width=3.0, left_prob=0.9, right_prob=0.9, lane_change=LaneChangeState.off):
-  # straight road, lane centered on the car, planned path held at car_y (car center, m to the right)
+def make_model(car_y=0.0, lane_width=3.0, left_prob=0.9, right_prob=0.9, lane_change=LaneChangeState.off, curve=0.0):
+  # lane centered on the car with curvature curve (1/m, positive right), planned path held at car_y (car center, m to the right)
   md = log.ModelDataV2.new_message()
-  md.position.x = (V_EGO * np.array(ModelConstants.T_IDXS)).tolist()
-  md.position.y = [car_y + CAMERA_OFFSET] * ModelConstants.IDX_N
+  path_x = V_EGO * np.array(ModelConstants.T_IDXS)
+  md.position.x = path_x.tolist()
+  md.position.y = (car_y + CAMERA_OFFSET + curve / 2 * path_x ** 2).tolist()
   lane_lines = md.init('laneLines', 4)
+  line_x = np.array(ModelConstants.X_IDXS)
   for i, y in enumerate((-1.5 * lane_width, -lane_width / 2, lane_width / 2, 1.5 * lane_width)):
-    lane_lines[i].x = ModelConstants.X_IDXS
-    lane_lines[i].y = [y] * ModelConstants.IDX_N
+    lane_lines[i].x = line_x.tolist()
+    lane_lines[i].y = (y + curve / 2 * line_x ** 2).tolist()
   md.laneLineProbs = [0.5, left_prob, right_prob, 0.5]
   md.laneLineStds = [0.1] * 4
   md.meta.laneChangeState = lane_change
@@ -42,9 +45,21 @@ class TestLaneGuard(OpenpilotTestCase):
     assert settle(LaneGuard(), make_model(-car_y, lane_width=2.6)) < 0.0
 
   def test_crossing_pushes_harder_than_close(self):
-    close = settle(LaneGuard(), make_model(-(1.3 - CAR_HALF_WIDTH - 0.05), lane_width=2.6))
-    over = settle(LaneGuard(), make_model(-(1.3 - CAR_HALF_WIDTH + 0.10), lane_width=2.6))
-    assert 0.0 < close < over
+    close = settle(LaneGuard(), make_model(1.3 - CAR_HALF_WIDTH - 0.05, lane_width=2.6))
+    over = settle(LaneGuard(), make_model(1.3 - CAR_HALF_WIDTH + 0.10, lane_width=2.6))
+    assert 0.0 > close > over
+
+  def test_left_line_unguarded_on_unmarked_road(self):
+    # only the left line is seen, likely the imagined middle of the road
+    car_y = -(1.3 - CAR_HALF_WIDTH + 0.10)
+    assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, right_prob=0.3)) == 0.0
+
+  def test_left_line_gentle_outside_left_curves(self):
+    car_y = -(1.3 - CAR_HALF_WIDTH + 0.5)
+    straight = settle(LaneGuard(), make_model(car_y, lane_width=2.6))
+    left_curve = settle(LaneGuard(), make_model(car_y, lane_width=2.6, curve=-1 / 300))
+    assert 0.0 < straight <= MAX_LEFT_LAT_ACCEL / V_EGO ** 2 + 1e-12
+    assert left_curve > 2 * straight
 
   def test_narrow_lane_centered(self):
     # both margins overlap, the pushes from both lines cancel when centered
@@ -81,10 +96,10 @@ class TestLaneGuard(OpenpilotTestCase):
 
   def test_limits(self):
     guard = LaneGuard()
-    md = make_model(-1.0, lane_width=2.6)
+    md = make_model(1.0, lane_width=2.6)
     first = guard.update(V_EGO, md, True)
-    assert 0.0 < first <= MAX_LAT_JERK / V_EGO ** 2 * guard.dt + 1e-12
-    assert settle(guard, md) <= MAX_LAT_ACCEL / V_EGO ** 2 + 1e-12
+    assert 0.0 > first >= -MAX_LAT_JERK / V_EGO ** 2 * guard.dt - 1e-12
+    assert settle(guard, md) >= -MAX_LAT_ACCEL / V_EGO ** 2 - 1e-12
 
   def test_ramps_out_when_inactive(self):
     guard = LaneGuard()
