@@ -21,7 +21,8 @@ MAX_LINE_STD = 0.3  # m
 MAX_EDGE_STD = 1.0  # m
 MAX_EDGE_T = 1.5  # s, the edge 2 s ahead often runs straight on past a junction the model turns into
 MIN_LANE_WIDTH = 2.0  # m, narrower is a misdetection, the car does not fit
-MAX_LANE_WIDTH = 4.5  # m, wider is a missing center line, a merge, an exit or a shoulder, only the right line is guarded
+MAX_LANE_WIDTH = 4.5  # m, wider is a missing center line, a merge, an exit or a shoulder, only the curb line is guarded
+CURB_ROAD_MAX = 2.5  # m, more road than this beyond a lone curb line is a bike lane, parking lane or shoulder
 MAX_LAT_ACCEL = 1.0  # m/s^2
 MAX_LAT_JERK = 4.0  # m/s^3
 LANE_CHANGE_COOLDOWN = 1.0  # s, lines are unguarded this long after a lane change or the blinker, they are reassigned after a lane change
@@ -40,10 +41,13 @@ def get_lane_guard_curvature(v_ego, path_x, path_y, left, right, left_edge, righ
   # left, right, left_edge, right_edge are (x, y) or None when not trusted.
   # On straights the model leaves the lane on purpose, to pass parked cars or make room in a bike lane for oncoming traffic,
   # so lane lines are only guarded in curves. Without the curb line (right, left in left-hand traffic), the other one is often
-  # only the imagined middle of the road and is not guarded. Road edges are always guarded.
+  # only the imagined middle of the road and is not guarded. A lone curb line with more road beyond it is the line of a bike lane
+  # or shoulder the model moves into to make room, and is not guarded either. Road edges are always guarded.
   lines = [line for line in (left, right) if line is not None]
-  curb = left if left_hand_traffic else right
-  curve = curb is not None and abs(get_lane_curvature(v_ego, lines)) > MIN_CURVE
+  curb, curb_edge, side = (left, left_edge, -1) if left_hand_traffic else (right, right_edge, 1)
+  curb_x = np.interp(MAX_EDGE_T, ModelConstants.T_IDXS, path_x)
+  road_beyond = curb is not None and curb_edge is not None and side * (np.interp(curb_x, *curb_edge) - np.interp(curb_x, *curb)) > CURB_ROAD_MAX
+  curve = curb is not None and (len(lines) == 2 or not road_beyond) and abs(get_lane_curvature(v_ego, lines)) > MIN_CURVE
 
   curvature = 0.0
   for t in LOOKAHEAD_T:

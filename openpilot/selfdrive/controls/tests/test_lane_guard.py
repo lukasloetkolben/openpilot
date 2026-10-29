@@ -60,6 +60,14 @@ class TestLaneGuard(OpenpilotTestCase):
     car_y = -(1.3 - CAR_HALF_WIDTH + 0.10)
     assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, right_prob=0.3)) == 0.0
 
+  def test_lone_curb_line_unguarded_with_road_beyond(self):
+    # a bike lane or shoulder beyond the right line, the model moves into it to make room
+    car_y = 1.3 - CAR_HALF_WIDTH + 0.10
+    assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, left_prob=0.3, edge=2.0)) < 0.0
+    assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, left_prob=0.3, edge=3.0)) == 0.0
+    assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, edge=3.0)) < 0.0
+    assert settle(LaneGuard(), make_model(-car_y, lane_width=2.6, right_prob=0.3, edge=3.0), left_hand_traffic=True) == 0.0
+
   def test_lines_unguarded_on_straights(self):
     # the model leaves the lane on purpose there, e.g. into a bike lane to make room for oncoming traffic
     car_y = 1.3 - CAR_HALF_WIDTH + 0.3
