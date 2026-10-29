@@ -25,6 +25,8 @@ def main():
   while True:
     sm.update()
     if sm.updated['modelV2']:
+      if sm.frame % 20 == 0:
+        longitudinal_planner.curve_speed_enabled = params.get_bool("CurveSpeedEnabled")
       longitudinal_planner.update(sm)
       longitudinal_planner.publish(sm, pm)
 
