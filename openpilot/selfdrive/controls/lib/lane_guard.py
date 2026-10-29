@@ -62,9 +62,10 @@ def get_lane_guard_curvature(v_ego, path_x, path_y, left, right, left_edge, righ
       lane_width = left_gap + right_gap + 2 * CAR_HALF_WIDTH if left is not None and right is not None else None
       if lane_width is None or lane_width >= MIN_LANE_WIDTH:
         # without a center line the far line is often the other road edge, keep guarding the curb line
-        if left_gap is not None and (left_hand_traffic or lane_width < MAX_LANE_WIDTH):
+        wide = lane_width is not None and lane_width >= MAX_LANE_WIDTH
+        if left_gap is not None and (left_hand_traffic or not wide):
           gaps_left.append(left_gap)
-        if right_gap is not None and (not left_hand_traffic or lane_width < MAX_LANE_WIDTH):
+        if right_gap is not None and (not left_hand_traffic or not wide):
           gaps_right.append(right_gap)
 
     # Getting closer than MARGIN pushes away, and the part over the line counts twice.
@@ -100,17 +101,17 @@ class LaneGuard:
       self.lane_change_timer = max(self.lane_change_timer - self.dt, 0.0)
 
     target = 0.0
-    lane_lines = model_v2.laneLines
-    if self.lane_change_timer == 0.0 and len(lane_lines) == 4 and len(model_v2.laneLineStds) == 4:
+    lane_lines, road_edges = model_v2.laneLines, model_v2.roadEdges
+    has_lines = len(lane_lines) == 4 and len(model_v2.laneLineStds) == 4
+    if self.lane_change_timer == 0.0 and has_lines:
       for i, idx in enumerate((1, 2)):
         min_prob = MIN_LINE_PROB_KEEP if self.line_valid[i] else MIN_LINE_PROB
         self.line_valid[i] = model_v2.laneLineProbs[idx] > min_prob and model_v2.laneLineStds[idx] < MAX_LINE_STD
     else:
       self.line_valid = [False, False]
 
-    road_edges = model_v2.roadEdges
-    if active and v_ego > MIN_SPEED and len(model_v2.position.x) == ModelConstants.IDX_N and \
-       len(lane_lines) == 4 and len(model_v2.laneLineStds) == 4 and len(road_edges) == 2 and len(model_v2.roadEdgeStds) == 2:
+    if active and v_ego > MIN_SPEED and has_lines and len(model_v2.position.x) == ModelConstants.IDX_N and \
+       len(road_edges) == 2 and len(model_v2.roadEdgeStds) == 2:
       left, right = ((lane_lines[idx].x, lane_lines[idx].y) if self.line_valid[i] else None for i, idx in enumerate((1, 2)))
       left_edge, right_edge = ((edge.x, edge.y) if std < MAX_EDGE_STD else None for edge, std in zip(road_edges, model_v2.roadEdgeStds, strict=True))
       target = get_lane_guard_curvature(v_ego, model_v2.position.x, model_v2.position.y, left, right, left_edge, right_edge, left_hand_traffic)

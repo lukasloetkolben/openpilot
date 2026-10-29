@@ -153,6 +153,21 @@ class TestLaneGuard(OpenpilotTestCase):
     assert settle(guard, make_model(car_y, lane_width=2.6), steps=steps) == 0.0
     assert settle(guard, make_model(car_y, lane_width=2.6)) > 0.0
 
+  def test_nan_does_not_stick(self):
+    # a NaN anywhere in the model output must not get stuck in the guard's curvature
+    car_y = -(1.3 - CAR_HALF_WIDTH + 0.05)
+    for name in ('line', 'path', 'edge'):
+      bad = make_model(car_y, lane_width=2.6)
+      if name == 'line':
+        bad.laneLines[1].y = [float('nan')] * len(bad.laneLines[1].y)
+      elif name == 'path':
+        bad.position.y = [float('nan')] * len(bad.position.y)
+      else:
+        bad.roadEdges[0].y = [float('nan')] * len(bad.roadEdges[0].y)
+      guard = LaneGuard()
+      assert np.isfinite(settle(guard, bad, steps=5))
+      assert settle(guard, make_model(car_y, lane_width=2.6)) > 0.0
+
   def test_limits(self):
     guard = LaneGuard()
     md = make_model(1.0, lane_width=2.6)
