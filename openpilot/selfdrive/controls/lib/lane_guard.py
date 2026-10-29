@@ -28,10 +28,12 @@ MAX_LAT_JERK = 4.0  # m/s^3
 LANE_CHANGE_COOLDOWN = 1.0  # s, lines are unguarded this long after a lane change or the blinker, they are reassigned after a lane change
 MIN_CURVE = 1 / 2000.  # 1/m, lane lines are only guarded in curves, where the model cuts them
 LANE_CURVE_T = 2.5  # s, how far ahead the lane curvature is measured
+SHARP_BEND_EXCESS = 1 / 200.  # 1/m, a plan curving this much tighter than the lines, the same way, follows a sharp bend
+SHARP_BEND_RATIO = 2.5  # and at least this many times tighter, so a cut of a gentle curve stays guarded
 
 
-def get_lane_curvature(v_ego, lines):
-  # curvature of the mean of the lines, positive to the right like desiredCurvature
+def get_curvature(v_ego, lines):
+  # curvature of the mean of the lines (or the plan), positive to the right like desiredCurvature
   xs = np.linspace(5.0, max(30.0, LANE_CURVE_T * v_ego), 10)
   center = np.mean([np.interp(xs, x, y) for x, y in lines], axis=0)
   return 2 * np.polyfit(xs, center, 2)[0]
@@ -42,12 +44,19 @@ def get_lane_guard_curvature(v_ego, path_x, path_y, left, right, left_edge, righ
   # On straights the model leaves the lane on purpose, to pass parked cars or make room in a bike lane for oncoming traffic,
   # so lane lines are only guarded in curves. Without the curb line (right, left in left-hand traffic), the other one is often
   # only the imagined middle of the road and is not guarded. A lone curb line with more road beyond it is the line of a bike lane
-  # or shoulder the model moves into to make room, and is not guarded either. Road edges are always guarded.
+  # or shoulder the model moves into to make room, and is not guarded either. In sharp bends, mostly at night, the far end of
+  # the lines often runs too straight while the plan follows the road, so lines are not guarded there. Road edges are always guarded.
   lines = [line for line in (left, right) if line is not None]
   curb, curb_edge, side = (left, left_edge, -1) if left_hand_traffic else (right, right_edge, 1)
   curb_x = np.interp(MAX_EDGE_T, ModelConstants.T_IDXS, path_x)
   road_beyond = curb is not None and curb_edge is not None and side * (np.interp(curb_x, *curb_edge) - np.interp(curb_x, *curb)) > CURB_ROAD_MAX
-  curve = curb is not None and (len(lines) == 2 or not road_beyond) and abs(get_lane_curvature(v_ego, lines)) > MIN_CURVE
+  curve = False
+  if curb is not None and (len(lines) == 2 or not road_beyond):
+    lane_curvature = get_curvature(v_ego, lines)
+    plan_curvature = get_curvature(v_ego, [(path_x, path_y)])
+    sharp_bend = lane_curvature * plan_curvature > 0 and abs(plan_curvature) - abs(lane_curvature) > SHARP_BEND_EXCESS and \
+                 abs(plan_curvature) > SHARP_BEND_RATIO * abs(lane_curvature)
+    curve = abs(lane_curvature) > MIN_CURVE and not sharp_bend
 
   curvature = 0.0
   for t in LOOKAHEAD_T:

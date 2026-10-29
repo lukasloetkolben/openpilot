@@ -76,6 +76,18 @@ class TestLaneGuard(OpenpilotTestCase):
     assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, curve=-CURVE)) < 0.0
     assert settle(LaneGuard(), make_model(-car_y, lane_width=2.6, curve=-CURVE)) > 0.0
 
+  def test_lines_unguarded_in_sharp_bend_lines_miss(self):
+    # the plan follows a sharp right bend whose lines run too straight, it crosses the right line only on the model's map.
+    # Road edges unsure, they are guarded regardless
+    car_y = 1.3 - CAR_HALF_WIDTH - 0.10
+    md = make_model(car_y, lane_width=2.6, curve=1 / 200., edge_std=1.5)
+    path_x = np.array(md.position.x)
+    md.position.y = (car_y + CAMERA_OFFSET + 1 / 70. / 2 * path_x ** 2).tolist()
+    assert settle(LaneGuard(), md) == 0.0
+    # a plan cutting a gentle curve, only somewhat tighter than the lines, stays guarded
+    md.position.y = (car_y + CAMERA_OFFSET + 1 / 150. / 2 * path_x ** 2).tolist()
+    assert settle(LaneGuard(), md) < 0.0
+
   def test_road_edge_always_guarded(self):
     # body 5 cm over the road edge, on a straight and without trusted lane lines
     car_y = 1.3 + 0.1 - CAR_HALF_WIDTH + 0.05
