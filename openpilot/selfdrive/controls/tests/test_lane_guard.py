@@ -7,7 +7,8 @@ from openpilot.selfdrive.controls.lib.ldw import CAMERA_OFFSET
 from openpilot.selfdrive.modeld.constants import ModelConstants
 
 V_EGO = 20.0
-CURVE = 1 / 500.  # 1/m, lane lines are only guarded in curves
+SLOW = 12.0  # m/s, below MIN_STRAIGHT_SPEED, lane lines are only guarded in curves
+CURVE = 1 / 500.  # 1/m
 LaneChangeState = log.LaneChangeState
 
 
@@ -34,9 +35,9 @@ def make_model(car_y=0.0, lane_width=3.0, left_prob=0.9, right_prob=0.9, lane_ch
   return md
 
 
-def settle(guard, md, active=True, steps=500, blinker=False, left_hand_traffic=False):
+def settle(guard, md, active=True, steps=500, blinker=False, left_hand_traffic=False, v_ego=V_EGO):
   for _ in range(steps):
-    curvature = guard.update(V_EGO, md, active, blinker, left_hand_traffic)
+    curvature = guard.update(v_ego, md, active, blinker, left_hand_traffic)
   return curvature
 
 
@@ -68,13 +69,25 @@ class TestLaneGuard(OpenpilotTestCase):
     assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, edge=3.0)) < 0.0
     assert settle(LaneGuard(), make_model(-car_y, lane_width=2.6, right_prob=0.3, edge=3.0), left_hand_traffic=True) == 0.0
 
-  def test_lines_unguarded_on_straights(self):
+  def test_lines_unguarded_on_slow_straights(self):
     # the model leaves the lane on purpose there, e.g. into a bike lane to make room for oncoming traffic
     car_y = 1.3 - CAR_HALF_WIDTH + 0.3
-    assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, curve=0.0)) == 0.0
-    assert settle(LaneGuard(), make_model(-car_y, lane_width=2.6, curve=0.0)) == 0.0
-    assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, curve=-CURVE)) < 0.0
-    assert settle(LaneGuard(), make_model(-car_y, lane_width=2.6, curve=-CURVE)) > 0.0
+    assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, curve=0.0), v_ego=SLOW) == 0.0
+    assert settle(LaneGuard(), make_model(-car_y, lane_width=2.6, curve=0.0), v_ego=SLOW) == 0.0
+    assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, curve=-CURVE), v_ego=SLOW) < 0.0
+    assert settle(LaneGuard(), make_model(-car_y, lane_width=2.6, curve=-CURVE), v_ego=SLOW) > 0.0
+
+  def test_fast_straights_push_only_when_crossing(self):
+    # no margin on straights, the car barely fits in narrow lanes with it
+    inside = 1.3 - CAR_HALF_WIDTH - 0.05
+    assert settle(LaneGuard(), make_model(inside, lane_width=2.6, curve=0.0)) == 0.0
+    assert settle(LaneGuard(), make_model(-inside, lane_width=2.6, curve=0.0)) == 0.0
+    assert settle(LaneGuard(), make_model(inside, lane_width=2.6)) < 0.0
+    over = 1.3 - CAR_HALF_WIDTH + 0.05
+    assert settle(LaneGuard(), make_model(over, lane_width=2.6, curve=0.0)) < 0.0
+    assert settle(LaneGuard(), make_model(-over, lane_width=2.6, curve=0.0)) > 0.0
+    # the lone far line is still not guarded
+    assert settle(LaneGuard(), make_model(-over, lane_width=2.6, curve=0.0, right_prob=0.3)) == 0.0
 
   def test_lines_unguarded_in_sharp_bend_lines_miss(self):
     # the plan follows a sharp right bend whose lines run too straight, it crosses the right line only on the model's map.
@@ -102,14 +115,14 @@ class TestLaneGuard(OpenpilotTestCase):
 
   def test_road_edge_ignores_far_crossing(self):
     # a turn whose plan only crosses the edge 2 s ahead, where the edge often runs straight on past the junction
-    md = make_model(lane_width=2.6, curve=0.0, edge=0.5)
+    md = make_model(lane_width=2.6, curve=0.0, edge=0.5, left_prob=0.3, right_prob=0.3)
     path_x = np.array(md.position.x)
     md.position.y = (np.array(md.position.y) + 0.0006 * path_x ** 2).tolist()
     assert settle(LaneGuard(), md) == 0.0
 
   def test_ignores_unsure_road_edge(self):
     car_y = 1.3 + 0.1 - CAR_HALF_WIDTH + 0.05
-    assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, curve=0.0, edge=0.1, edge_std=1.5)) == 0.0
+    assert settle(LaneGuard(), make_model(car_y, lane_width=2.6, curve=0.0, edge=0.1, edge_std=1.5), v_ego=SLOW) == 0.0
 
   def test_narrow_lane_centered(self):
     # both margins overlap, the pushes from both lines cancel when centered

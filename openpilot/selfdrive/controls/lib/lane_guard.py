@@ -24,9 +24,10 @@ MIN_LANE_WIDTH = 2.0  # m, narrower is a misdetection, the car does not fit
 MAX_LANE_WIDTH = 4.5  # m, wider is a missing center line, a merge, an exit or a shoulder, only the curb line is guarded
 CURB_ROAD_MAX = 2.5  # m, more road than this beyond a lone curb line is a bike lane, parking lane or shoulder
 MAX_LAT_ACCEL = 1.0  # m/s^2
-MAX_LAT_JERK = 4.0  # m/s^3
+MAX_LAT_JERK = 3.5  # m/s^3
 LANE_CHANGE_COOLDOWN = 1.0  # s, lines are unguarded this long after a lane change or the blinker, they are reassigned after a lane change
-MIN_CURVE = 1 / 2000.  # 1/m, lane lines are only guarded in curves, where the model cuts them
+MIN_CURVE = 1 / 2000.  # 1/m, lane lines are guarded in curves, where the model cuts them
+MIN_STRAIGHT_SPEED = 50 / 3.6  # m/s, and on straights above this, nobody passes parked cars or makes room in a bike lane this fast
 LANE_CURVE_T = 2.5  # s, how far ahead the lane curvature is measured
 SHARP_BEND_EXCESS = 1 / 200.  # 1/m, a plan curving this much tighter than the lines, the same way, follows a sharp bend
 SHARP_BEND_RATIO = 2.5  # and at least this many times tighter, so a cut of a gentle curve stays guarded
@@ -39,33 +40,41 @@ def get_curvature(v_ego, lines):
   return 2 * np.polyfit(xs, center, 2)[0]
 
 
+def get_push(gap, margin):
+  # getting closer than margin pushes away, and the part over the line counts twice
+  return max(margin - gap, 0.0) + max(-gap, 0.0)
+
+
 def get_lane_guard_curvature(v_ego, path_x, path_y, left, right, left_edge, right_edge, left_hand_traffic=False):
   # left, right, left_edge, right_edge are (x, y) or None when not trusted.
   # On straights the model leaves the lane on purpose, to pass parked cars or make room in a bike lane for oncoming traffic,
-  # so lane lines are only guarded in curves. Without the curb line (right, left in left-hand traffic), the other one is often
-  # only the imagined middle of the road and is not guarded. A lone curb line with more road beyond it is the line of a bike lane
-  # or shoulder the model moves into to make room, and is not guarded either. In sharp bends, mostly at night, the far end of
-  # the lines often runs too straight while the plan follows the road, so lines are not guarded there. Road edges are always guarded.
+  # so below MIN_STRAIGHT_SPEED lane lines are only guarded in curves. On straights above it only crossing them is pushed back.
+  # Without the curb line (right, left in left-hand traffic), the other one is often only the imagined middle of the road and
+  # is not guarded. A lone curb line with more road beyond it is the line of a bike lane or shoulder the model moves into to
+  # make room, and is not guarded either. In sharp bends, mostly at night, the far end of the lines often runs too straight
+  # while the plan follows the road, so lines are not guarded there. Road edges are always guarded.
   lines = [line for line in (left, right) if line is not None]
   curb, curb_edge, side = (left, left_edge, -1) if left_hand_traffic else (right, right_edge, 1)
   curb_x = np.interp(MAX_EDGE_T, ModelConstants.T_IDXS, path_x)
   road_beyond = curb is not None and curb_edge is not None and side * (np.interp(curb_x, *curb_edge) - np.interp(curb_x, *curb)) > CURB_ROAD_MAX
-  curve = False
+  guard_lines, line_margin = False, MARGIN
   if curb is not None and (len(lines) == 2 or not road_beyond):
     lane_curvature = get_curvature(v_ego, lines)
     plan_curvature = get_curvature(v_ego, [(path_x, path_y)])
     sharp_bend = lane_curvature * plan_curvature > 0 and abs(plan_curvature) - abs(lane_curvature) > SHARP_BEND_EXCESS and \
                  abs(plan_curvature) > SHARP_BEND_RATIO * abs(lane_curvature)
-    curve = abs(lane_curvature) > MIN_CURVE and not sharp_bend
+    curve = abs(lane_curvature) > MIN_CURVE
+    guard_lines = (curve or v_ego > MIN_STRAIGHT_SPEED) and not sharp_bend
+    line_margin = MARGIN if curve else 0.0  # on straight narrow lanes the body may come closer, the car barely fits with MARGIN
 
   curvature = 0.0
   for t in LOOKAHEAD_T:
     x = np.interp(t, ModelConstants.T_IDXS, path_x)
     car_y = np.interp(t, ModelConstants.T_IDXS, path_y) - CAMERA_OFFSET
     near = t <= MAX_EDGE_T
-    gaps_left = [(car_y - CAR_HALF_WIDTH) - np.interp(x, *left_edge)] if left_edge is not None and near else []
-    gaps_right = [np.interp(x, *right_edge) - (car_y + CAR_HALF_WIDTH)] if right_edge is not None and near else []
-    if curve:
+    pushes_left = [get_push((car_y - CAR_HALF_WIDTH) - np.interp(x, *left_edge), MARGIN)] if left_edge is not None and near else []
+    pushes_right = [get_push(np.interp(x, *right_edge) - (car_y + CAR_HALF_WIDTH), MARGIN)] if right_edge is not None and near else []
+    if guard_lines:
       left_gap = (car_y - CAR_HALF_WIDTH) - np.interp(x, *left) if left is not None else None
       right_gap = np.interp(x, *right) - (car_y + CAR_HALF_WIDTH) if right is not None else None
       lane_width = left_gap + right_gap + 2 * CAR_HALF_WIDTH if left is not None and right is not None else None
@@ -73,20 +82,13 @@ def get_lane_guard_curvature(v_ego, path_x, path_y, left, right, left_edge, righ
         # without a center line the far line is often the other road edge, keep guarding the curb line
         wide = lane_width is not None and lane_width >= MAX_LANE_WIDTH
         if left_gap is not None and (left_hand_traffic or not wide):
-          gaps_left.append(left_gap)
+          pushes_left.append(get_push(left_gap, line_margin))
         if right_gap is not None and (not left_hand_traffic or not wide):
-          gaps_right.append(right_gap)
+          pushes_right.append(get_push(right_gap, line_margin))
 
-    # Getting closer than MARGIN pushes away, and the part over the line counts twice.
     # pure pursuit: curvature that moves the path by push at distance x
     push_curvature = 2 / max(x, MIN_LOOKAHEAD_DIST) ** 2
-    point_curvature = 0.0
-    if gaps_left:
-      gap = min(gaps_left)
-      point_curvature += push_curvature * (max(MARGIN - gap, 0.0) + max(-gap, 0.0))
-    if gaps_right:
-      gap = min(gaps_right)
-      point_curvature -= push_curvature * (max(MARGIN - gap, 0.0) + max(-gap, 0.0))
+    point_curvature = push_curvature * (max(pushes_left, default=0.0) - max(pushes_right, default=0.0))
 
     if abs(point_curvature) > abs(curvature):
       curvature = point_curvature
