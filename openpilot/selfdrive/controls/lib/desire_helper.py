@@ -71,7 +71,14 @@ class DesireHelper:
     self.prev_one_blinker = one_blinker and lateral_active
 
     self.desire = log.Desire.none
-    if self.lane_change_state == LaneChangeState.laneChangeStarting:
+    # below the lane change speed a blinker announces a turn, the model turns at the next road on that side.
+    # Not into something in the blind spot, e.g. a cyclist on the inside of the turn
+    if one_blinker and below_lane_change_speed:
+      if carstate.leftBlinker and not carstate.leftBlindspot:
+        self.desire = log.Desire.turnLeft
+      elif carstate.rightBlinker and not carstate.rightBlindspot:
+        self.desire = log.Desire.turnRight
+    elif self.lane_change_state == LaneChangeState.laneChangeStarting:
       if self.lane_change_direction == LaneChangeDirection.left:
         self.desire = log.Desire.laneChangeLeft
       elif self.lane_change_direction == LaneChangeDirection.right:
