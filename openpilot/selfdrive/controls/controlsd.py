@@ -14,6 +14,7 @@ from opendbc.car.car_helpers import interfaces
 from opendbc.car.vehicle_model import VehicleModel
 from openpilot.selfdrive.controls.lib.drive_helpers import clip_curvature
 from openpilot.selfdrive.controls.lib.lane_guard import LaneGuard
+from openpilot.selfdrive.controls.lib.corner_correction import CornerCorrection
 from openpilot.selfdrive.controls.lib.latcontrol import LatControl
 from openpilot.selfdrive.controls.lib.latcontrol_pid import LatControlPID
 from openpilot.selfdrive.controls.lib.latcontrol_angle import LatControlAngle, STEER_ANGLE_SATURATION_THRESHOLD
@@ -54,6 +55,8 @@ class Controls:
     self.lane_guard = LaneGuard()
     self.lane_guard_enabled = self.params.get_bool("LaneGuardEnabled")
     self.left_hand_traffic = self.params.get_bool("IsRhdDetected")  # a right-hand drive car most likely drives on the left
+    self.corner_correction = CornerCorrection()
+    self.corner_correction_enabled = self.params.get_bool("CornerCorrectionEnabled")
     self.LoC = LongControl(self.CP)
     self.VM = VehicleModel(self.CP)
     self.LaC: LatControl
@@ -127,12 +130,14 @@ class Controls:
     if self.sm.frame % int(1. / DT_CTRL) == 0:
       self.lane_guard_enabled = self.params.get_bool("LaneGuardEnabled")
       self.left_hand_traffic = self.params.get_bool("IsRhdDetected")
+      self.corner_correction_enabled = self.params.get_bool("CornerCorrectionEnabled")
     lane_guard_curvature = self.lane_guard.update(CS.vEgo, model_v2, self.lane_guard_enabled and CC.latActive and not CS.steeringPressed,
                                                   CS.leftBlinker or CS.rightBlinker, self.left_hand_traffic)
+    corner_curvature = self.corner_correction.update(CS.vEgo, model_v2, self.corner_correction_enabled and CC.latActive and not CS.steeringPressed)
     if self.sm.valid['lateralManeuverPlan']:
       new_desired_curvature = self.sm['lateralManeuverPlan'].desiredCurvature if CC.latActive else self.curvature
     else:
-      new_desired_curvature = model_v2.action.desiredCurvature + lane_guard_curvature if CC.latActive else self.curvature
+      new_desired_curvature = model_v2.action.desiredCurvature + lane_guard_curvature + corner_curvature if CC.latActive else self.curvature
     self.desired_curvature, curvature_limited = clip_curvature(CS.vEgo, self.desired_curvature, new_desired_curvature, lp.roll)
     lat_delay = self.sm["lateralDelay"].lateralDelay + LAT_SMOOTH_SECONDS
 

@@ -87,6 +87,8 @@ class DeveloperLayoutMici(NavScroller):
                                               description="Gently steer away from lane lines the car is about to cross.")
     self._curve_speed_toggle = BigParamControl("curve braking", "CurveSpeedEnabled",
                                                description="Brake for curves the model would take faster than 2.8 m/s² sideways.")
+    self._corner_correction_toggle = BigParamControl("corner correction", "CornerCorrectionEnabled",
+                                                     description="Steer slightly wider in tight junction turns where the lane lines are gone.")
     self._navigation_toggle = BigParamControl("navigation (alpha)", "NavigationEnabled",
                                               description="Turn-by-turn navigation with a route map. Set a destination from comma connect.")
     self._debug_mode_toggle = BigParamControl("ui debug mode", "ShowDebugInfo",
@@ -99,6 +101,7 @@ class DeveloperLayoutMici(NavScroller):
       self._ssh_keys_btn,
       self._lane_guard_toggle,
       self._curve_speed_toggle,
+      self._corner_correction_toggle,
       self._joystick_toggle,
       self._long_maneuver_toggle,
       self._lat_maneuver_toggle,
@@ -113,6 +116,7 @@ class DeveloperLayoutMici(NavScroller):
       ("SshEnabled", self._ssh_toggle),
       ("LaneGuardEnabled", self._lane_guard_toggle),
       ("CurveSpeedEnabled", self._curve_speed_toggle),
+      ("CornerCorrectionEnabled", self._corner_correction_toggle),
       ("JoystickDebugMode", self._joystick_toggle),
       ("LongitudinalManeuverMode", self._long_maneuver_toggle),
       ("LateralManeuverMode", self._lat_maneuver_toggle),
