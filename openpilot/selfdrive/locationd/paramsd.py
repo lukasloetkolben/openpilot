@@ -6,6 +6,7 @@ import capnp
 import openpilot.cereal.messaging as messaging
 from openpilot.cereal import log
 from opendbc.car.structs import car
+from opendbc.car.tesla.values import TeslaFlags
 from openpilot.common.params import Params
 from openpilot.common.realtime import config_realtime_process, DT_MDL
 from openpilot.selfdrive.locationd.models.car_kf import CarKalman, ObservationKind, States
@@ -29,9 +30,10 @@ class VehicleParamsLearner:
   def __init__(self, CP: car.CarParams, steer_ratio: float, stiffness_factor: float, angle_offset: float, P_initial: np.ndarray | None = None):
     self.kf = CarKalman(GENERATED_DIR)
 
+    # Fixed steer ratio 14 and stiffness 1.34 (slip factor -4.3e-4), measured on this Model Y with roll; angle offset and roll are still learned
     self.x_initial = CarKalman.initial_x.copy()
-    self.x_initial[States.STEER_RATIO] = steer_ratio
-    self.x_initial[States.STIFFNESS] = stiffness_factor
+    self.x_initial[States.STEER_RATIO] = 14.0
+    self.x_initial[States.STIFFNESS] = 1.34
     self.x_initial[States.ANGLE_OFFSET] = angle_offset
     self.P_initial = P_initial if P_initial is not None else CarKalman.P_initial
 
@@ -46,6 +48,11 @@ class VehicleParamsLearner:
     self.min_sr, self.max_sr = 0.5 * CP.steerRatio, 2.0 * CP.steerRatio
 
     self.calibrator = PoseCalibrator()
+
+    # Use the car's yaw rate sensor instead of the device gyro where it is known to be accurate.
+    # The gyro of some devices reads a few percent low, which makes the learned steer ratio too high.
+    self.use_car_yaw_rate = CP.brand == "tesla" and bool(CP.flags & TeslaFlags.HW4_GEN2)
+    self.car_yaw_rate = 0.0
 
     self.observed_speed = 0.0
     self.observed_yaw_rate = 0.0
@@ -70,6 +77,9 @@ class VehicleParamsLearner:
       calibrated_pose = self.calibrator.build_calibrated_pose(device_motion)
 
       yaw_rate, yaw_rate_std = calibrated_pose.angular_velocity.z, calibrated_pose.angular_velocity.z_std
+      if self.use_car_yaw_rate:
+        # carState yaw rate is positive to the left, the calibrated frame's z axis points down
+        yaw_rate = -self.car_yaw_rate
       yaw_rate_valid = msg.angularVelocityDevice.valid
       yaw_rate_valid = yaw_rate_valid and 0 < yaw_rate_std < 10  # rad/s
       yaw_rate_valid = yaw_rate_valid and abs(yaw_rate) < 1  # rad/s
@@ -104,19 +114,17 @@ class VehicleParamsLearner:
                                       np.array([np.atleast_2d(roll_std**2)]))
         self.kf.predict_and_observe(t, ObservationKind.ANGLE_OFFSET_FAST, np.array([[0]]))
 
-        # We observe the current stiffness and steer ratio (with a high observation noise) to bound
-        # the respective estimate STD. Otherwise the STDs keep increasing, causing rapid changes in the
-        # states in longer routes (especially straight stretches).
-        stiffness = float(self.kf.x[States.STIFFNESS].item())
-        steer_ratio = float(self.kf.x[States.STEER_RATIO].item())
-        self.kf.predict_and_observe(t, ObservationKind.STIFFNESS, np.array([[stiffness]]))
-        self.kf.predict_and_observe(t, ObservationKind.STEER_RATIO, np.array([[steer_ratio]]))
+        # Pin stiffness and steer ratio with an observation noise far below the process noise
+        fixed_R = np.array([np.atleast_2d(1e-3**2)])
+        self.kf.predict_and_observe(t, ObservationKind.STIFFNESS, np.array([[1.34]]), fixed_R)
+        self.kf.predict_and_observe(t, ObservationKind.STEER_RATIO, np.array([[14.0]]), fixed_R)
 
     elif which == 'extrinsicsCalibration':
       self.calibrator.feed_extrinsics_calibration(msg)
 
     elif which == 'carState':
       steering_angle = msg.steeringAngleDeg
+      self.car_yaw_rate = msg.yawRate
 
       in_linear_region = abs(steering_angle) < 45
       self.observed_speed = msg.vEgo
