@@ -1,10 +1,14 @@
+from types import SimpleNamespace
+
 import numpy as np
 
 from openpilot.cereal import log
+from openpilot.common.realtime import DT_CTRL
 from openpilot.common.test import OpenpilotTestCase
 from openpilot.selfdrive.controls.lib.lane_guard import CAR_HALF_WIDTH, DECUT_MAX_LAT_ACCEL, LANE_CHANGE_COOLDOWN, LOOKAHEAD_T, MAX_LAT_ACCEL, \
-                                                       MAX_LAT_JERK, LaneGuard, get_typical_cut
+                                                       MAX_LAT_JERK, TESLA_MAX_LAT_JERK, LaneGuard, combine, get_typical_cut
 from openpilot.selfdrive.controls.lib.ldw import CAMERA_OFFSET
+from openpilot.selfdrive.controls.lib.tesla_lanes import MAX_AGE, TeslaLaneReader, parse_das_lanes
 from openpilot.selfdrive.modeld.constants import ModelConstants
 
 V_EGO = 20.0
@@ -36,9 +40,9 @@ def make_model(car_y=0.0, lane_width=3.0, left_prob=0.9, right_prob=0.9, lane_ch
   return md
 
 
-def settle(guard, md, active=True, steps=500, blinker=False, left_hand_traffic=False, v_ego=V_EGO, lines=True, decut=False):
+def settle(guard, md, active=True, steps=500, blinker=False, left_hand_traffic=False, v_ego=V_EGO, lines=True, decut=False, tesla_lane=None):
   for _ in range(steps):
-    curvature = guard.update(v_ego, md, active, blinker, left_hand_traffic, lines, decut)
+    curvature = guard.update(v_ego, md, active, blinker, left_hand_traffic, lines, decut, tesla_lane)
   return curvature
 
 
@@ -290,3 +294,108 @@ class TestDeCut(OpenpilotTestCase):
     guard = LaneGuard()
     assert np.isfinite(settle(guard, bad, steps=5, lines=False, decut=True))
     assert settle(guard, make_model(0.15), lines=False, decut=True) < 0.0
+
+
+def das_lanes_bytes(width_idx=3, view=80, c0=0.0, c1=0.0, c2=0.0, c3=0.0, left_usage=2, right_usage=2):
+  return bytes([width_idx << 4, view, round((c0 + 3.5) / 0.035), round((c1 + 0.2) / 0.0016), round((c2 + 0.0025) / 2e-5),
+                round((c3 + 3e-5) / 2.4e-7), left_usage | (right_usage << 2), 0])
+
+
+def can_event(dat, src=2, address=0x239):
+  return SimpleNamespace(can=[SimpleNamespace(src=src, address=address, dat=dat)])
+
+
+def tesla_only(md, lane, **kwargs):
+  # Tesla lane guard alone, lane guard and de-cut off
+  return settle(LaneGuard(), md, lines=False, tesla_lane=lane, **kwargs)
+
+
+class TestTeslaLanes(OpenpilotTestCase):
+  def test_parse(self):
+    lane = parse_das_lanes(das_lanes_bytes(width_idx=3, view=80, c0=0.35, c2=1 / 1000.))
+    assert lane.width == 2.9375 and lane.view_range == 80.0
+    assert abs(lane.coeffs[0] - 0.35) < 0.02 and abs(lane.coeffs[1]) < 0.001 and abs(lane.coeffs[2] - 1 / 1000.) < 2e-5
+    assert lane.left_usage == 2 and lane.right_usage == 2
+    assert parse_das_lanes(b'\x00' * 7) is None
+
+  def test_reader_keeps_newest_and_ages_out(self):
+    reader = TeslaLaneReader(sock=False)
+    reader.feed([can_event(das_lanes_bytes(c0=0.35)), can_event(das_lanes_bytes(c0=-0.35))])  # newest first
+    assert reader.get().coeffs[0] > 0.0
+    for _ in range(int(MAX_AGE / DT_CTRL) + 1):
+      reader.feed([])
+    assert reader.get() is None
+
+  def test_reader_ignores_other_bus_and_short_view(self):
+    reader = TeslaLaneReader(sock=False)
+    reader.feed([can_event(das_lanes_bytes(), src=0), can_event(das_lanes_bytes(), address=0x238)])
+    assert reader.get() is None
+    reader.feed([can_event(das_lanes_bytes(view=5))])
+    assert reader.get() is None
+
+  def test_pushes_off_tesla_lane_edge(self):
+    # openpilot sees no lines at all, Tesla's 2.94 m lane is straight and centered on the car
+    lane = parse_das_lanes(das_lanes_bytes(width_idx=3))
+    over = 2.9375 / 2 - CAR_HALF_WIDTH + 0.10
+    md = make_model(over, curve=0.0, left_prob=0.1, right_prob=0.1, edge_std=1.5)
+    assert settle(LaneGuard(), md) == 0.0
+    assert tesla_only(md, lane) < 0.0
+    assert tesla_only(make_model(-over, curve=0.0, left_prob=0.1, right_prob=0.1, edge_std=1.5), lane) > 0.0
+
+  def test_inside_tesla_lane_does_nothing(self):
+    lane = parse_das_lanes(das_lanes_bytes(width_idx=3))
+    assert tesla_only(make_model(0.1, curve=0.0), lane) == 0.0
+
+  def test_guards_at_low_speed_and_slow_straights(self):
+    # roundabouts and town roads, where the line guard is off
+    lane = parse_das_lanes(das_lanes_bytes(width_idx=3))
+    md = make_model(2.9375 / 2 - CAR_HALF_WIDTH + 0.10, curve=0.0)
+    assert settle(LaneGuard(), md, v_ego=5.0) == 0.0
+    assert tesla_only(md, lane, v_ego=5.0) < 0.0
+    assert tesla_only(md, lane, v_ego=2.0) == 0.0
+
+  def test_paused_with_blinker(self):
+    lane = parse_das_lanes(das_lanes_bytes(width_idx=3))
+    assert tesla_only(make_model(2.9375 / 2 - CAR_HALF_WIDTH + 0.10, curve=0.0), lane, blinker=True) == 0.0
+
+  def test_beyond_view_range_ignored(self):
+    lane = parse_das_lanes(das_lanes_bytes(width_idx=3, view=12))
+    assert tesla_only(make_model(2.9375 / 2 - CAR_HALF_WIDTH + 0.10, curve=0.0), lane) == 0.0
+
+  def test_follows_tesla_lane_in_curve(self):
+    # Tesla's lane curves right with the road, a plan holding the middle of it is fine, one cutting to the inside is pushed out
+    lane = parse_das_lanes(das_lanes_bytes(width_idx=3, c2=CURVE / 2))
+    assert tesla_only(make_model(0.0), lane) == 0.0
+    assert tesla_only(make_model(2.9375 / 2 - CAR_HALF_WIDTH), lane) < 0.0
+
+  def test_combines_with_line_guard(self):
+    # both push away from the same line: the stronger wins, not the sum
+    lane = parse_das_lanes(das_lanes_bytes(width_idx=3))
+    md = make_model(1.5 - CAR_HALF_WIDTH + 0.1, lane_width=3.0, curve=0.0)
+    guard_only, tesla, both = settle(LaneGuard(), md), tesla_only(md, lane), settle(LaneGuard(), md, tesla_lane=lane)
+    assert both == min(guard_only, tesla)
+    assert combine(1.0, -0.4) == 0.6 and combine(-1.0, -0.4) == -1.0 and combine(0.0, 0.3) == 0.3
+
+  def test_skips_a_lane_the_car_is_not_in(self):
+    edge_over = 2.9375 / 2 - CAR_HALF_WIDTH
+    # the lowest width code
+    assert tesla_only(make_model(2.0 / 2 - CAR_HALF_WIDTH + 0.1, curve=0.0), parse_das_lanes(das_lanes_bytes(width_idx=0))) == 0.0
+    # the body is already 0.4 m outside Tesla's lane
+    assert tesla_only(make_model(edge_over + 0.4, curve=0.0), parse_das_lanes(das_lanes_bytes(width_idx=3))) == 0.0
+
+  def test_skips_a_plan_going_another_way(self):
+    # starts inside Tesla's lane, 1.5 s ahead it is far outside: a turn or fork Tesla's lane does not take
+    lane = parse_das_lanes(das_lanes_bytes(width_idx=3))
+    md = make_model(0.0, curve=0.0)
+    path_x = np.array(md.position.x)
+    md.position.y = (np.array(md.position.y) + 1 / 150. / 2 * path_x ** 2).tolist()
+    assert tesla_only(md, lane) == 0.0
+
+  def test_ramps_with_lower_jerk(self):
+    lane = parse_das_lanes(das_lanes_bytes(width_idx=3))
+    md = make_model(2.9375 / 2 - CAR_HALF_WIDTH + 0.10, curve=0.0, left_prob=0.1, right_prob=0.1, edge_std=1.5)
+    guard = LaneGuard()
+    first = guard.update(V_EGO, md, True, guard=False, tesla_lane=lane)
+    assert 0.0 > first >= -TESLA_MAX_LAT_JERK / V_EGO ** 2 * guard.dt - 1e-12
+    settle(guard, md, lines=False, tesla_lane=lane)
+    assert settle(guard, md, lines=False, tesla_lane=None, steps=1) < 0.0  # ramps out, does not drop

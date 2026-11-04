@@ -87,6 +87,9 @@ class DeveloperLayoutMici(NavScroller):
                                               description="Gently steer away from lane lines the car is about to cross.")
     self._decut_toggle = BigParamControl("curve de-cut", "DeCutEnabled",
                                          description="In curves, move the car back out by the amount the model usually cuts toward the inside.")
+    self._tesla_lane_guard_toggle = BigParamControl("tesla lane guard", "TeslaLaneGuardEnabled",
+                                                    description="Keep the car inside the lane Tesla's Autopilot computer sees, also on straights, " +
+                                                                "wide roads and in roundabouts. Test, it does not know about parked cars.")
     self._curve_speed_toggle = BigParamControl("curve braking", "CurveSpeedEnabled",
                                                description="Brake for curves the model would take faster than 2.8 m/s² sideways.")
     self._navigation_toggle = BigParamControl("navigation (alpha)", "NavigationEnabled",
@@ -101,6 +104,7 @@ class DeveloperLayoutMici(NavScroller):
       self._ssh_keys_btn,
       self._lane_guard_toggle,
       self._decut_toggle,
+      self._tesla_lane_guard_toggle,
       self._curve_speed_toggle,
       self._joystick_toggle,
       self._long_maneuver_toggle,
@@ -116,6 +120,7 @@ class DeveloperLayoutMici(NavScroller):
       ("SshEnabled", self._ssh_toggle),
       ("LaneGuardEnabled", self._lane_guard_toggle),
       ("DeCutEnabled", self._decut_toggle),
+      ("TeslaLaneGuardEnabled", self._tesla_lane_guard_toggle),
       ("CurveSpeedEnabled", self._curve_speed_toggle),
       ("JoystickDebugMode", self._joystick_toggle),
       ("LongitudinalManeuverMode", self._long_maneuver_toggle),
