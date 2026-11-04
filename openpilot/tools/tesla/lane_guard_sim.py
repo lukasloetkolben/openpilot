@@ -58,7 +58,7 @@ def load(route, cache):
   return data
 
 
-def simulate(data, pullback):
+def simulate(data, pullback, decut=False):
   t, v, pressed, lat, lane_change, blinker = (data[:, i] for i in range(6))
   probs, stds, edge_stds = data[:, 6:10], data[:, 10:14], data[:, 14:16]
   path_x, path_y, left_x, left_y, right_x, right_y, ledge_x, ledge_y, redge_x, redge_y = \
@@ -89,7 +89,7 @@ def simulate(data, pullback):
       roadEdges=[SimpleNamespace(x=ledge_x[i], y=ledge_y[i] - dy - dpsi * ledge_x[i]),
                  SimpleNamespace(x=redge_x[i], y=redge_y[i] - dy - dpsi * redge_x[i])],
       roadEdgeStds=edge_stds[i])
-    k_guard = guard.update(v[i], model, True, bool(blinker[i]))
+    k_guard = guard.update(v[i], model, True, bool(blinker[i]), decut=decut)
 
     if v[i] > MIN_SPEED and probs[i, 1] > MIN_LINE_PROB and probs[i, 2] > MIN_LINE_PROB and lane_change[i] == 0:
       left, right = left_y[i, 0] - dy, right_y[i, 0] - dy
@@ -130,6 +130,7 @@ if __name__ == "__main__":
   parser.add_argument("route")
   parser.add_argument("--cache", help="npy file to store the extracted model data in")
   parser.add_argument("--pullback", type=float, nargs="*", default=[0.0, 2.5, 1.5], help="model pullback lookahead(s) in s, 0 = none")
+  parser.add_argument("--decut", action="store_true", help="also run each pullback with curve de-cut")
   args = parser.parse_args()
 
   data = load(args.route, args.cache)
@@ -146,5 +147,7 @@ if __name__ == "__main__":
   report("logged (no guard)", np.stack([(car_y - CAR_HALF_WIDTH) - left0, right0 - (car_y + CAR_HALF_WIDTH), right0 - left0], axis=1),
          np.stack([ledge0, redge0], axis=1))
   for pullback in args.pullback:
-    gaps, edge_gaps, guard_k = simulate(data, pullback)
-    report(f"guard, pullback {pullback:.1f}s" if pullback else "guard, model ignores", gaps, edge_gaps, guard_k)
+    for decut in ((False, True) if args.decut else (False,)):
+      gaps, edge_gaps, guard_k = simulate(data, pullback, decut)
+      name = f"guard, pullback {pullback:.1f}s" if pullback else "guard, model ignores"
+      report(name + (" +de-cut" if decut else ""), gaps, edge_gaps, guard_k)

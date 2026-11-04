@@ -2,7 +2,8 @@ import numpy as np
 
 from openpilot.cereal import log
 from openpilot.common.test import OpenpilotTestCase
-from openpilot.selfdrive.controls.lib.lane_guard import CAR_HALF_WIDTH, LANE_CHANGE_COOLDOWN, MAX_LAT_ACCEL, MAX_LAT_JERK, LaneGuard
+from openpilot.selfdrive.controls.lib.lane_guard import CAR_HALF_WIDTH, DECUT_MAX_LAT_ACCEL, LANE_CHANGE_COOLDOWN, LOOKAHEAD_T, MAX_LAT_ACCEL, \
+                                                       MAX_LAT_JERK, LaneGuard, get_typical_cut
 from openpilot.selfdrive.controls.lib.ldw import CAMERA_OFFSET
 from openpilot.selfdrive.modeld.constants import ModelConstants
 
@@ -35,10 +36,15 @@ def make_model(car_y=0.0, lane_width=3.0, left_prob=0.9, right_prob=0.9, lane_ch
   return md
 
 
-def settle(guard, md, active=True, steps=500, blinker=False, left_hand_traffic=False, v_ego=V_EGO):
+def settle(guard, md, active=True, steps=500, blinker=False, left_hand_traffic=False, v_ego=V_EGO, lines=True, decut=False):
   for _ in range(steps):
-    curvature = guard.update(v_ego, md, active, blinker, left_hand_traffic)
+    curvature = guard.update(v_ego, md, active, blinker, left_hand_traffic, lines, decut)
   return curvature
+
+
+def decut(md, **kwargs):
+  # de-cut alone, lane guard off
+  return settle(LaneGuard(), md, lines=False, decut=True, **kwargs)
 
 
 class TestLaneGuard(OpenpilotTestCase):
@@ -205,3 +211,82 @@ class TestLaneGuard(OpenpilotTestCase):
     md = make_model(-1.0, lane_width=2.6)
     settle(guard, md)
     assert settle(guard, md, active=False) == 0.0
+
+
+class TestDeCut(OpenpilotTestCase):
+  # CURVE is a right curve, inside is to the right (positive car_y)
+  def test_moves_a_cutting_plan_out(self):
+    # plan 15 cm toward the inside, well clear of the line: the guard does nothing, de-cut steers out (left, negative)
+    md = make_model(0.15)
+    assert settle(LaneGuard(), md) == 0.0
+    assert decut(md) < 0.0
+    assert decut(make_model(-0.15, curve=-CURVE)) > 0.0
+
+  def test_never_past_lane_center(self):
+    # up to interpolating the curved path and lines on their different grids
+    assert abs(decut(make_model(0.0))) < 0.01 / V_EGO ** 2
+    assert decut(make_model(-0.15)) == 0.0  # already toward the outside
+
+  def test_only_the_typical_cut(self):
+    # anything beyond the typical cut stays the model's choice
+    t = 1.5
+    cut = get_typical_cut(t, CURVE, V_EGO)
+    assert 0.05 < cut < 0.3
+    assert decut(make_model(cut + 0.05)) == decut(make_model(cut + 0.3))
+    assert abs(decut(make_model(cut / 2))) < abs(decut(make_model(cut + 0.05)))
+
+  def test_typical_cut_grows_with_curvature(self):
+    for t in LOOKAHEAD_T:
+      for side in (1, -1):
+        cuts = [get_typical_cut(t, side * k, V_EGO) for k in (1 / 1000., 1 / 500., 1 / 200.)]
+        assert 0.0 <= cuts[0] < cuts[1] < cuts[2]
+
+  def test_left_hand_traffic_mirrors_cut(self):
+    for t in LOOKAHEAD_T:
+      assert get_typical_cut(t, CURVE, V_EGO, left_hand_traffic=True) == get_typical_cut(t, -CURVE, V_EGO)
+
+  def test_keeps_room_to_the_outside_line(self):
+    # 2.0 m lane, the left body edge is already 8 cm from the outside line
+    assert decut(make_model(0.04, lane_width=2.0)) == 0.0
+
+  def test_not_on_straights(self):
+    assert decut(make_model(0.3, curve=0.0)) == 0.0
+
+  def test_needs_both_lines(self):
+    assert decut(make_model(0.15, left_prob=0.3)) == 0.0
+    assert decut(make_model(0.15, right_prob=0.3)) == 0.0
+
+  def test_off_with_blinker(self):
+    assert decut(make_model(0.15), blinker=True) == 0.0
+
+  def test_off_when_inactive(self):
+    assert decut(make_model(0.15), active=False) == 0.0
+
+  def test_not_while_the_plan_moves_out(self):
+    # the plan already heads toward the outside (left in this right curve) while still inside: no more push
+    for heading, expect_push in ((-0.002, False), (0.0, True), (0.002, True)):
+      md = make_model(0.15)
+      path_x = np.array(md.position.x)
+      md.position.y = (np.array(md.position.y) + heading * path_x).tolist()
+      assert (decut(md) < 0.0) == expect_push
+
+  def test_stronger_push_wins(self):
+    # plan over the inside line: the guard keeps its full push, the two are not added up
+    md = make_model(1.5 - CAR_HALF_WIDTH + 0.1)
+    guard_only, decut_only, both = settle(LaneGuard(), md), decut(md), settle(LaneGuard(), md, decut=True)
+    assert guard_only < decut_only < 0.0
+    assert both == guard_only
+    # plan inside but clear of the line: the guard does nothing, de-cut alone acts
+    md = make_model(0.15)
+    assert settle(LaneGuard(), md, decut=True) == decut(md) < 0.0
+
+  def test_limits(self):
+    md = make_model(0.6, curve=1 / 120.)
+    assert decut(md, v_ego=10.0) >= -DECUT_MAX_LAT_ACCEL / 10.0 ** 2 - 1e-12
+
+  def test_nan_does_not_stick(self):
+    bad = make_model(0.15)
+    bad.laneLines[2].y = [float('nan')] * len(bad.laneLines[2].y)
+    guard = LaneGuard()
+    assert np.isfinite(settle(guard, bad, steps=5, lines=False, decut=True))
+    assert settle(guard, make_model(0.15), lines=False, decut=True) < 0.0

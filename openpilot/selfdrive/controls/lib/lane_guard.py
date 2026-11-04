@@ -32,6 +32,54 @@ LANE_CURVE_T = 2.5  # s, how far ahead the lane curvature is measured
 SHARP_BEND_EXCESS = 1 / 200.  # 1/m, a plan curving this much tighter than the lines, the same way, follows a sharp bend
 SHARP_BEND_RATIO = 2.5  # and at least this many times tighter, so a cut of a gentle curve stays guarded
 
+# De-cut: in curves the model plans the car toward the inside by a typical amount that grows with curvature (and, in right
+# curves, with lateral acceleration). It is moved back by that amount, but never past the lane center and never closer than
+# DECUT_OUTSIDE_ROOM to the outside line, so anything beyond the typical cut (passing, making room) stays the model's choice.
+# Fit on 11 drives (right-hand traffic), plan offset at each check point:
+#   right curves: a * curvature + c * curvature * v^2, left curves: b * curvature + d * curvature * v^2
+DECUT_COEFFS = {1.0: (-2.672, 24.013, 0.153, 0.055), 1.5: (-0.187, 28.34, 0.119, 0.03), 2.0: (4.953, 35.264, 0.065, -0.023)}
+DECUT_OUTSIDE_ROOM = MARGIN  # m, so it never moves the car into the guard's margin of the outside line
+DECUT_MAX_LAT_ACCEL = 0.5  # m/s^2
+DECUT_HEADING_T = (0.5, 2.0)  # s, the plan's direction in the lane is taken between these points
+DECUT_HEADING_TOL = 0.02  # m, so it does not flicker on a plan running parallel to the lane
+
+
+def get_typical_cut(t, curvature, v_ego, left_hand_traffic=False):
+  # how far the model typically plans the car toward the inside of a curve at t, m, always >= 0
+  k = -curvature if left_hand_traffic else curvature
+  a, b, c, d = DECUT_COEFFS[t]
+  cut = a * k + c * k * v_ego ** 2 if k > 0 else b * k + d * k * v_ego ** 2
+  return max(cut * np.sign(k), 0.0)
+
+
+def get_inside_offset(t, path_x, path_y, left, right, side):
+  # how far the plan is toward the inside of the lane at t, m
+  x = np.interp(t, ModelConstants.T_IDXS, path_x)
+  car_y = np.interp(t, ModelConstants.T_IDXS, path_y) - CAMERA_OFFSET
+  return side * (car_y - (np.interp(x, *left) + np.interp(x, *right)) / 2)
+
+
+def get_decut_shifts(v_ego, path_x, path_y, left, right, lane_curvature, left_hand_traffic=False):
+  # outward shift (m, >= 0) of the plan at each LOOKAHEAD_T, inside is the side the lane bends to
+  side = np.sign(lane_curvature)
+  # a plan already moving toward the outside, e.g. after earlier pushes the model has not taken back yet, is left alone,
+  # or the pushes add up while the model is slow to follow
+  near, far = (get_inside_offset(t, path_x, path_y, left, right, side) for t in DECUT_HEADING_T)
+  if not far >= near - DECUT_HEADING_TOL:
+    return side, [0.0] * len(LOOKAHEAD_T)
+  shifts = []
+  for t in LOOKAHEAD_T:
+    x = np.interp(t, ModelConstants.T_IDXS, path_x)
+    car_y = np.interp(t, ModelConstants.T_IDXS, path_y) - CAMERA_OFFSET
+    left_y, right_y = np.interp(x, *left), np.interp(x, *right)
+    shift = 0.0
+    if MIN_LANE_WIDTH <= right_y - left_y < MAX_LANE_WIDTH:
+      inside_offset = side * (car_y - (left_y + right_y) / 2)
+      outside_gap = (car_y - CAR_HALF_WIDTH) - left_y if side > 0 else right_y - (car_y + CAR_HALF_WIDTH)
+      shift = min(get_typical_cut(t, lane_curvature, v_ego, left_hand_traffic), max(inside_offset, 0.0), max(outside_gap - DECUT_OUTSIDE_ROOM, 0.0))
+    shifts.append(float(shift) if np.isfinite(shift) else 0.0)
+  return side, shifts
+
 
 def get_curvature(v_ego, lines):
   # curvature of the mean of the lines (or the plan), positive to the right like desiredCurvature
@@ -45,7 +93,7 @@ def get_push(gap, margin):
   return max(margin - gap, 0.0) + max(-gap, 0.0)
 
 
-def get_lane_guard_curvature(v_ego, path_x, path_y, left, right, left_edge, right_edge, left_hand_traffic=False):
+def get_lane_guard_curvature(v_ego, path_x, path_y, left, right, left_edge, right_edge, left_hand_traffic=False, guard=True, decut=False):
   # left, right, left_edge, right_edge are (x, y) or None when not trusted.
   # On straights the model leaves the lane on purpose, to pass parked cars or make room in a bike lane for oncoming traffic,
   # so below MIN_STRAIGHT_SPEED lane lines are only guarded in curves. On straights above it only crossing them is pushed back.
@@ -58,14 +106,31 @@ def get_lane_guard_curvature(v_ego, path_x, path_y, left, right, left_edge, righ
   curb_x = np.interp(MAX_EDGE_T, ModelConstants.T_IDXS, path_x)
   road_beyond = curb is not None and curb_edge is not None and side * (np.interp(curb_x, *curb_edge) - np.interp(curb_x, *curb)) > CURB_ROAD_MAX
   guard_lines, line_margin = False, MARGIN
-  if curb is not None and (len(lines) == 2 or not road_beyond):
+  lane_curvature, sharp_bend = 0.0, True
+  if len(lines):
     lane_curvature = get_curvature(v_ego, lines)
     plan_curvature = get_curvature(v_ego, [(path_x, path_y)])
     sharp_bend = lane_curvature * plan_curvature > 0 and abs(plan_curvature) - abs(lane_curvature) > SHARP_BEND_EXCESS and \
                  abs(plan_curvature) > SHARP_BEND_RATIO * abs(lane_curvature)
-    curve = abs(lane_curvature) > MIN_CURVE
+  curve = abs(lane_curvature) > MIN_CURVE
+  if curb is not None and (len(lines) == 2 or not road_beyond):
     guard_lines = (curve or v_ego > MIN_STRAIGHT_SPEED) and not sharp_bend
     line_margin = MARGIN if curve else 0.0  # on straight narrow lanes the body may come closer, the car barely fits with MARGIN
+
+  # de-cut needs both lines, for the lane center and the outside line
+  decut_curvature = 0.0
+  if decut and len(lines) == 2 and curve and not sharp_bend:
+    side, shifts = get_decut_shifts(v_ego, path_x, path_y, left, right, lane_curvature, left_hand_traffic)
+    for t, shift in zip(LOOKAHEAD_T, shifts, strict=True):
+      x = np.interp(t, ModelConstants.T_IDXS, path_x)
+      point_curvature = -side * 2 * shift / max(x, MIN_LOOKAHEAD_DIST) ** 2
+      if abs(point_curvature) > abs(decut_curvature):
+        decut_curvature = point_curvature
+    max_decut = DECUT_MAX_LAT_ACCEL / max(v_ego, MIN_SPEED) ** 2
+    decut_curvature = float(np.clip(decut_curvature, -max_decut, max_decut))
+
+  if not guard:
+    return decut_curvature
 
   curvature = 0.0
   for t in LOOKAHEAD_T:
@@ -93,6 +158,11 @@ def get_lane_guard_curvature(v_ego, path_x, path_y, left, right, left_edge, righ
     if abs(point_curvature) > abs(curvature):
       curvature = point_curvature
 
+  # pushing the same way, the stronger one wins: the guard keeps its full push over a line, de-cut covers the cuts it ignores
+  if curvature * decut_curvature > 0:
+    curvature = curvature if abs(curvature) > abs(decut_curvature) else decut_curvature
+  else:
+    curvature += decut_curvature
   max_curvature = MAX_LAT_ACCEL / max(v_ego, MIN_SPEED) ** 2
   return float(np.clip(curvature, -max_curvature, max_curvature))
 
@@ -104,7 +174,7 @@ class LaneGuard:
     self.lane_change_timer = 0.0
     self.line_valid = [False, False]  # left, right
 
-  def update(self, v_ego, model_v2, active, blinker=False, left_hand_traffic=False):
+  def update(self, v_ego, model_v2, active, blinker=False, left_hand_traffic=False, guard=True, decut=False):
     # a blinker means the driver is about to leave the lane, also below the lane change speed. Road edges stay guarded.
     if blinker or model_v2.meta.laneChangeState != LaneChangeState.off:
       self.lane_change_timer = LANE_CHANGE_COOLDOWN
@@ -125,7 +195,8 @@ class LaneGuard:
        len(road_edges) == 2 and len(model_v2.roadEdgeStds) == 2:
       left, right = ((lane_lines[idx].x, lane_lines[idx].y) if self.line_valid[i] else None for i, idx in enumerate((1, 2)))
       left_edge, right_edge = ((edge.x, edge.y) if std < MAX_EDGE_STD else None for edge, std in zip(road_edges, model_v2.roadEdgeStds, strict=True))
-      target = get_lane_guard_curvature(v_ego, model_v2.position.x, model_v2.position.y, left, right, left_edge, right_edge, left_hand_traffic)
+      target = get_lane_guard_curvature(v_ego, model_v2.position.x, model_v2.position.y, left, right, left_edge, right_edge, left_hand_traffic,
+                                        guard, decut)
 
     max_change = MAX_LAT_JERK / max(v_ego, MIN_SPEED) ** 2 * self.dt
     self.curvature = float(np.clip(target, self.curvature - max_change, self.curvature + max_change))

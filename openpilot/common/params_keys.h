@@ -29,6 +29,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"CurrentBootlog", {PERSISTENT, STRING}},
     {"CurrentRoute", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, STRING}},
     {"CurveSpeedEnabled", {PERSISTENT, BOOL, "1"}},
+    {"DeCutEnabled", {PERSISTENT, BOOL, "1"}},
     {"DisableDriverCameraIR", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, BOOL}},
     {"DisableLogging", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, BOOL}},
     {"DisablePowerDown", {PERSISTENT, BOOL}},
