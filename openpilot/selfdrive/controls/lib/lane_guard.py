@@ -15,6 +15,11 @@ MARGIN = 0.15  # m, gap to keep between the body and a line or road edge
 LOOKAHEAD_T = (1.0, 1.5, 2.0)  # s, points of the planned path that are checked, closer ones oscillate with the steering lag
 MIN_LOOKAHEAD_DIST = 10.0  # m
 MIN_SPEED = 8.0  # m/s
+TESLA_MIN_SPEED = 3.0  # m/s, Tesla's lane is guarded in roundabouts and junctions too
+TESLA_MIN_WIDTH = 2.1  # m, the lowest width code (2.0 m) comes with lanes that are not where the car is
+TESLA_MAX_START_OVER = 0.3  # m, the body may be this far outside Tesla's lane now, more and it is another lane
+TESLA_MAX_OVER = 0.5  # m, a plan this far outside Tesla's lane goes another way, it is not drifting
+TESLA_MAX_LAT_JERK = 0.75  # m/s^3, half the lines'
 MIN_LINE_PROB = 0.7
 MIN_LINE_PROB_KEEP = 0.6  # once trusted, a line stays trusted down to this
 MAX_LINE_STD = 0.3  # m
@@ -97,14 +102,52 @@ def get_lane_guard_curvature(v_ego, path_x, path_y, left, right, left_edge, righ
   return float(np.clip(curvature, -max_curvature, max_curvature))
 
 
+def combine(a, b):
+  # pushing the same way, the stronger one wins, otherwise they add up
+  if a * b > 0:
+    return a if abs(a) > abs(b) else b
+  return a + b
+
+
+def get_tesla_lane_curvature(v_ego, path_x, path_y, tesla_lane):
+  # keeps the body inside Tesla's own lane (DAS_lanes), like the lane lines but also on straights, on wide roads and where the
+  # center line is faded and openpilot sees none, and in roundabouts. Tesla's lane is skipped when it is not the one the car is
+  # in: its lowest width code, the car already outside it, or a plan far outside it, which follows another way through a
+  # junction or fork than Tesla's lane
+  if tesla_lane.width < TESLA_MIN_WIDTH:
+    return 0.0
+  left, right = tesla_lane.edges()
+  car_y0 = path_y[0] - CAMERA_OFFSET
+  start_over = max(np.interp(path_x[0], *left) - (car_y0 - CAR_HALF_WIDTH), (car_y0 + CAR_HALF_WIDTH) - np.interp(path_x[0], *right))
+  if not start_over <= TESLA_MAX_START_OVER:
+    return 0.0
+  margin = MARGIN if abs(get_curvature(v_ego, [(left[0], (left[1] + right[1]) / 2)])) > MIN_CURVE else 0.0
+  curvature = 0.0
+  for t in LOOKAHEAD_T:
+    x = np.interp(t, ModelConstants.T_IDXS, path_x)
+    if x > tesla_lane.view_range:
+      continue
+    car_y = np.interp(t, ModelConstants.T_IDXS, path_y) - CAMERA_OFFSET
+    left_gap = (car_y - CAR_HALF_WIDTH) - np.interp(x, *left)
+    right_gap = np.interp(x, *right) - (car_y + CAR_HALF_WIDTH)
+    if not min(left_gap, right_gap) >= -TESLA_MAX_OVER:
+      return 0.0
+    point_curvature = 2 / max(x, MIN_LOOKAHEAD_DIST) ** 2 * (get_push(left_gap, margin) - get_push(right_gap, margin))
+    if abs(point_curvature) > abs(curvature):
+      curvature = point_curvature
+  max_curvature = MAX_LAT_ACCEL / max(v_ego, MIN_SPEED) ** 2
+  return float(np.clip(curvature, -max_curvature, max_curvature))
+
+
 class LaneGuard:
   def __init__(self, dt=DT_CTRL):
     self.dt = dt
     self.curvature = 0.0
+    self.tesla_curvature = 0.0
     self.lane_change_timer = 0.0
     self.line_valid = [False, False]  # left, right
 
-  def update(self, v_ego, model_v2, active, blinker=False, left_hand_traffic=False):
+  def update(self, v_ego, model_v2, active, blinker=False, left_hand_traffic=False, guard=True, tesla_lane=None):
     # a blinker means the driver is about to leave the lane, also below the lane change speed. Road edges stay guarded.
     if blinker or model_v2.meta.laneChangeState != LaneChangeState.off:
       self.lane_change_timer = LANE_CHANGE_COOLDOWN
@@ -121,11 +164,22 @@ class LaneGuard:
     else:
       self.line_valid = [False, False]
 
-    if active and v_ego > MIN_SPEED and has_lines and len(model_v2.position.x) == ModelConstants.IDX_N and \
+    if active and guard and v_ego > MIN_SPEED and has_lines and len(model_v2.position.x) == ModelConstants.IDX_N and \
        len(road_edges) == 2 and len(model_v2.roadEdgeStds) == 2:
       left, right = ((lane_lines[idx].x, lane_lines[idx].y) if self.line_valid[i] else None for i, idx in enumerate((1, 2)))
       left_edge, right_edge = ((edge.x, edge.y) if std < MAX_EDGE_STD else None for edge, std in zip(road_edges, model_v2.roadEdgeStds, strict=True))
       target = get_lane_guard_curvature(v_ego, model_v2.position.x, model_v2.position.y, left, right, left_edge, right_edge, left_hand_traffic)
+
+    # Tesla's lane, paused like the lines around a blinker or lane change, ramps in and out more gently than the lines
+    tesla_target = 0.0
+    if active and tesla_lane is not None and v_ego > TESLA_MIN_SPEED and self.lane_change_timer == 0.0 and \
+       len(model_v2.position.x) == ModelConstants.IDX_N:
+      tesla_target = get_tesla_lane_curvature(v_ego, model_v2.position.x, model_v2.position.y, tesla_lane)
+    max_tesla_change = TESLA_MAX_LAT_JERK / max(v_ego, MIN_SPEED) ** 2 * self.dt
+    self.tesla_curvature = float(np.clip(tesla_target, self.tesla_curvature - max_tesla_change, self.tesla_curvature + max_tesla_change))
+    if self.tesla_curvature != 0.0:
+      max_curvature = MAX_LAT_ACCEL / max(v_ego, MIN_SPEED) ** 2
+      target = float(np.clip(combine(target, self.tesla_curvature), -max_curvature, max_curvature))
 
     max_change = MAX_LAT_JERK / max(v_ego, MIN_SPEED) ** 2 * self.dt
     self.curvature = float(np.clip(target, self.curvature - max_change, self.curvature + max_change))
