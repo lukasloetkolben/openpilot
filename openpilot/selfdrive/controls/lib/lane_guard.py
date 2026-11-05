@@ -1,3 +1,5 @@
+from collections import deque
+
 import numpy as np
 
 from openpilot.cereal import log
@@ -20,6 +22,16 @@ TESLA_MIN_WIDTH = 2.1  # m, the lowest width code (2.0 m) comes with lanes that 
 TESLA_MAX_START_OVER = 0.3  # m, the body may be this far outside Tesla's lane now, more and it is another lane
 TESLA_MAX_OVER = 0.5  # m, a plan this far outside Tesla's lane goes another way, it is not drifting
 TESLA_MAX_LAT_JERK = 0.75  # m/s^3, half the lines'
+TESLA_MAX_CURVE_DIFF = 1 / 1000.  # 1/m, Tesla's lane is straighter than the road in bends (65-77 %, at most R 200 m) and lies outward
+EDGE_MIN_SPEED = 3.0  # m/s, the road edge is also guarded at the car, where the plan already reads the curb too far
+EDGE_MAX_SPEED = 60 / 3.6  # m/s
+EDGE_MARGIN = 0.2  # m
+EDGE_T = (0.0, 0.5)  # s, the car now and half a second ahead
+EDGE_CLOSING_T = 0.5  # s, closing speed to the edge is measured over this and added for as long
+EDGE_MIN_DIST = 5.0  # m
+ROOM_T = (0.5, 1.0, 1.5, 2.0, 2.5)  # s, plan points checked for room on the side a push goes to
+ROOM_MIN = 0.1  # m, no push toward a line or road edge the plan is this close to
+ROOM_FULL = 0.3  # m, full push from this much room
 MIN_LINE_PROB = 0.7
 MIN_LINE_PROB_KEEP = 0.6  # once trusted, a line stays trusted down to this
 MAX_LINE_STD = 0.3  # m
@@ -109,12 +121,24 @@ def combine(a, b):
   return a + b
 
 
+def get_plan_curvature(path_x, path_y, x_max):
+  xs = np.linspace(5.0, max(min(x_max, 40.0), 10.0), 8)
+  return 2 * np.polyfit(xs, np.interp(xs, path_x, path_y), 2)[0]
+
+
 def get_tesla_lane_curvature(v_ego, path_x, path_y, tesla_lane):
   # keeps the body inside Tesla's own lane (DAS_lanes), like the lane lines but also on straights, on wide roads and where the
   # center line is faded and openpilot sees none, and in roundabouts. Tesla's lane is skipped when it is not the one the car is
   # in: its lowest width code, the car already outside it, or a plan far outside it, which follows another way through a
   # junction or fork than Tesla's lane
   if tesla_lane.width < TESLA_MIN_WIDTH:
+    return 0.0
+  # on slow straights the model leaves the lane on purpose (parked cars), like the lines. In bends Tesla's lane is straighter than
+  # the road and lies outward, it is only used while it bends like the plan
+  plan_curvature = get_plan_curvature(path_x, path_y, tesla_lane.view_range)
+  if v_ego < MIN_STRAIGHT_SPEED and abs(plan_curvature) < MIN_CURVE:
+    return 0.0
+  if abs(2 * tesla_lane.coeffs[2] - plan_curvature) > TESLA_MAX_CURVE_DIFF:
     return 0.0
   left, right = tesla_lane.edges()
   car_y0 = path_y[0] - CAMERA_OFFSET
@@ -139,15 +163,56 @@ def get_tesla_lane_curvature(v_ego, path_x, path_y, tesla_lane):
   return float(np.clip(curvature, -max_curvature, max_curvature))
 
 
+def get_edge_gaps(path_x, path_y, edge, side):
+  # body gap to a road edge (side -1 left, 1 right) at the EDGE_T plan points, as (gap, x)
+  gaps = []
+  for t in EDGE_T:
+    x = np.interp(t, ModelConstants.T_IDXS, path_x)
+    car_y = np.interp(t, ModelConstants.T_IDXS, path_y) - CAMERA_OFFSET
+    gap = (car_y - CAR_HALF_WIDTH) - np.interp(x, *edge) if side < 0 else np.interp(x, *edge) - (car_y + CAR_HALF_WIDTH)
+    gaps.append((gap, x))
+  return gaps
+
+
+def get_edge_curvature(v_ego, gaps, closing):
+  # gaps and closing (m/s toward the edge) per side. The model's road edge near the car is right, further ahead it often runs
+  # too straight in bends, so the plan points 1 s ahead keep a gap the car then does not
+  curvature = 0.0
+  for side in (-1, 1):
+    for gap, x in gaps.get(side, ()):
+      push = get_push(min(gap, gap - closing.get(side, 0.0) * EDGE_CLOSING_T), EDGE_MARGIN)
+      point_curvature = -side * 2 / max(x, EDGE_MIN_DIST) ** 2 * push
+      if abs(point_curvature) > abs(curvature):
+        curvature = point_curvature
+  max_curvature = MAX_LAT_ACCEL / max(v_ego, MIN_SPEED) ** 2
+  return float(np.clip(curvature, -max_curvature, max_curvature))
+
+
+def get_room_scale(push, path_x, path_y, left, right):
+  # a push toward a side shrinks as the plan's room to that side's line (or road edge) goes from ROOM_FULL to ROOM_MIN, so the
+  # guards never squeeze the car toward the other side
+  ref, side = (right, 1) if push > 0 else (left, -1)
+  if push == 0.0 or ref is None:
+    return 1.0
+  room = np.inf
+  for t in ROOM_T:
+    x = np.interp(t, ModelConstants.T_IDXS, path_x)
+    car_y = np.interp(t, ModelConstants.T_IDXS, path_y) - CAMERA_OFFSET
+    room = min(room, np.interp(x, *ref) - (car_y + CAR_HALF_WIDTH) if side > 0 else (car_y - CAR_HALF_WIDTH) - np.interp(x, *ref))
+  return float(np.clip((room - ROOM_MIN) / (ROOM_FULL - ROOM_MIN), 0.0, 1.0))
+
+
 class LaneGuard:
   def __init__(self, dt=DT_CTRL):
     self.dt = dt
     self.curvature = 0.0
     self.tesla_curvature = 0.0
+    self.edge_curvature = 0.0
+    self.edge_gaps = {side: deque(maxlen=round(EDGE_CLOSING_T / dt) + 1) for side in (-1, 1)}  # gap at the car, for the closing speed
     self.lane_change_timer = 0.0
     self.line_valid = [False, False]  # left, right
 
-  def update(self, v_ego, model_v2, active, blinker=False, left_hand_traffic=False, guard=True, tesla_lane=None):
+  def update(self, v_ego, model_v2, active, blinker=False, left_hand_traffic=False, guard=True, tesla_lane=None, edge_guard=False):
     # a blinker means the driver is about to leave the lane, also below the lane change speed. Road edges stay guarded.
     if blinker or model_v2.meta.laneChangeState != LaneChangeState.off:
       self.lane_change_timer = LANE_CHANGE_COOLDOWN
@@ -180,6 +245,40 @@ class LaneGuard:
     if self.tesla_curvature != 0.0:
       max_curvature = MAX_LAT_ACCEL / max(v_ego, MIN_SPEED) ** 2
       target = float(np.clip(combine(target, self.tesla_curvature), -max_curvature, max_curvature))
+
+    # road edges at the car, stays on with the blinker like the road edges
+    has_plan = len(model_v2.position.x) == ModelConstants.IDX_N
+    has_edges = len(road_edges) == 2 and len(model_v2.roadEdgeStds) == 2
+    edge_target = 0.0
+    if active and edge_guard and EDGE_MIN_SPEED < v_ego < EDGE_MAX_SPEED and has_plan and has_edges:
+      gaps, closing = {}, {}
+      for side, edge, std in ((-1, road_edges[0], model_v2.roadEdgeStds[0]), (1, road_edges[1], model_v2.roadEdgeStds[1])):
+        history = self.edge_gaps[side]
+        if not std < MAX_EDGE_STD:
+          history.clear()
+          continue
+        gaps[side] = get_edge_gaps(model_v2.position.x, model_v2.position.y, (edge.x, edge.y), side)
+        history.append(gaps[side][0][0])
+        if len(history) == history.maxlen:
+          closing[side] = max((history[0] - history[-1]) / ((len(history) - 1) * self.dt), 0.0)
+      edge_target = get_edge_curvature(v_ego, gaps, closing)
+    else:
+      for history in self.edge_gaps.values():
+        history.clear()
+    max_edge_change = MAX_LAT_JERK / max(v_ego, MIN_SPEED) ** 2 * self.dt
+    self.edge_curvature = float(np.clip(edge_target, self.edge_curvature - max_edge_change, self.edge_curvature + max_edge_change))
+    if self.edge_curvature != 0.0:
+      max_curvature = MAX_LAT_ACCEL / max(v_ego, MIN_SPEED) ** 2
+      target = float(np.clip(combine(target, self.edge_curvature), -max_curvature, max_curvature))
+
+    if target != 0.0 and has_plan and has_lines and has_edges:
+      sides = []
+      for idx, edge, std in ((1, road_edges[0], model_v2.roadEdgeStds[0]), (2, road_edges[1], model_v2.roadEdgeStds[1])):
+        if model_v2.laneLineProbs[idx] > MIN_LINE_PROB and model_v2.laneLineStds[idx] < MAX_LINE_STD:
+          sides.append((lane_lines[idx].x, lane_lines[idx].y))
+        else:
+          sides.append((edge.x, edge.y) if std < MAX_EDGE_STD else None)
+      target *= get_room_scale(target, model_v2.position.x, model_v2.position.y, *sides)
 
     max_change = MAX_LAT_JERK / max(v_ego, MIN_SPEED) ** 2 * self.dt
     self.curvature = float(np.clip(target, self.curvature - max_change, self.curvature + max_change))

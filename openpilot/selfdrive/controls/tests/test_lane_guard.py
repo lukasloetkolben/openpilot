@@ -5,8 +5,8 @@ import numpy as np
 from openpilot.cereal import log
 from openpilot.common.realtime import DT_CTRL
 from openpilot.common.test import OpenpilotTestCase
-from openpilot.selfdrive.controls.lib.lane_guard import CAR_HALF_WIDTH, LANE_CHANGE_COOLDOWN, MAX_LAT_ACCEL, MAX_LAT_JERK, TESLA_MAX_LAT_JERK, \
-                                                       LaneGuard, combine
+from openpilot.selfdrive.controls.lib.lane_guard import CAR_HALF_WIDTH, EDGE_MAX_SPEED, LANE_CHANGE_COOLDOWN, MAX_LAT_ACCEL, MAX_LAT_JERK, \
+                                                       TESLA_MAX_LAT_JERK, LaneGuard, combine, get_room_scale
 from openpilot.selfdrive.controls.lib.ldw import CAMERA_OFFSET
 from openpilot.selfdrive.controls.lib.tesla_lanes import MAX_AGE, TeslaLaneReader, parse_das_lanes
 from openpilot.selfdrive.modeld.constants import ModelConstants
@@ -40,9 +40,9 @@ def make_model(car_y=0.0, lane_width=3.0, left_prob=0.9, right_prob=0.9, lane_ch
   return md
 
 
-def settle(guard, md, active=True, steps=500, blinker=False, left_hand_traffic=False, v_ego=V_EGO, lines=True, tesla_lane=None):
+def settle(guard, md, active=True, steps=500, blinker=False, left_hand_traffic=False, v_ego=V_EGO, lines=True, tesla_lane=None, edge_guard=False):
   for _ in range(steps):
-    curvature = guard.update(v_ego, md, active, blinker, left_hand_traffic, lines, tesla_lane)
+    curvature = guard.update(v_ego, md, active, blinker, left_hand_traffic, lines, tesla_lane, edge_guard)
   return curvature
 
 
@@ -262,13 +262,48 @@ class TestTeslaLanes(OpenpilotTestCase):
     lane = parse_das_lanes(das_lanes_bytes(width_idx=3))
     assert tesla_only(make_model(0.1, curve=0.0), lane) == 0.0
 
-  def test_guards_at_low_speed_and_slow_straights(self):
-    # roundabouts and town roads, where the line guard is off
+  def test_off_on_slow_straights(self):
+    # like the lines: the model leaves the lane there on purpose, e.g. to keep away from parked cars
     lane = parse_das_lanes(das_lanes_bytes(width_idx=3))
     md = make_model(2.9375 / 2 - CAR_HALF_WIDTH + 0.10, curve=0.0)
-    assert settle(LaneGuard(), md, v_ego=5.0) == 0.0
+    assert tesla_only(md, lane, v_ego=SLOW) == 0.0
+    assert tesla_only(md, lane, v_ego=5.0) == 0.0
+    assert tesla_only(md, lane) < 0.0
+
+  def test_guards_slow_bends_like_the_plan(self):
+    lane = parse_das_lanes(das_lanes_bytes(width_idx=3, c2=CURVE / 2))
+    md = make_model(2.9375 / 2 - CAR_HALF_WIDTH + 0.10)
     assert tesla_only(md, lane, v_ego=5.0) < 0.0
     assert tesla_only(md, lane, v_ego=2.0) == 0.0
+
+  def test_off_where_tesla_lane_bends_unlike_the_plan(self):
+    # in bends Tesla's lane is straighter than the road and lies outward, a plan following the road looks like a cut
+    md = make_model(2.9375 / 2 - CAR_HALF_WIDTH + 0.10, curve=CURVE)
+    assert tesla_only(md, parse_das_lanes(das_lanes_bytes(width_idx=3, c2=CURVE / 2))) < 0.0
+    assert tesla_only(md, parse_das_lanes(das_lanes_bytes(width_idx=3, c2=CURVE / 2 * 0.4))) == 0.0
+    assert tesla_only(md, parse_das_lanes(das_lanes_bytes(width_idx=3))) == 0.0
+
+  def test_no_push_toward_a_close_line(self):
+    # Tesla pushes right, openpilot's trusted right line is only 0.08 m from the body: no room, no push
+    lane = parse_das_lanes(das_lanes_bytes(width_idx=3))
+    car_y = -(2.9375 / 2 - CAR_HALF_WIDTH + 0.10)  # body 0.1 m over the left edge of Tesla's lane
+    md = make_model(car_y, curve=0.0, left_prob=0.1, edge_std=1.5)
+    md.laneLines[2].y = np.full(len(md.laneLines[2].x), car_y + CAR_HALF_WIDTH + 0.08).tolist()
+    assert tesla_only(md, lane) == 0.0
+    md.laneLineProbs = [0.5, 0.1, 0.1, 0.5]
+    assert tesla_only(md, lane) > 0.0
+
+  def test_room_scale(self):
+    path_x = V_EGO * np.array(ModelConstants.T_IDXS)
+    path_y = np.full(len(path_x), CAMERA_OFFSET)
+    line_x = np.array(ModelConstants.X_IDXS)
+    def line_at(room):
+      return line_x, np.full(len(line_x), CAR_HALF_WIDTH + room)
+    assert get_room_scale(0.01, path_x, path_y, None, line_at(0.5)) == 1.0
+    assert abs(get_room_scale(0.01, path_x, path_y, None, line_at(0.2)) - 0.5) < 1e-6
+    assert get_room_scale(0.01, path_x, path_y, None, line_at(0.05)) == 0.0
+    assert get_room_scale(-0.01, path_x, path_y, None, line_at(0.05)) == 1.0  # pushing left, nothing known there
+    assert get_room_scale(0.01, path_x, path_y, None, None) == 1.0
 
   def test_paused_with_blinker(self):
     lane = parse_das_lanes(das_lanes_bytes(width_idx=3))
@@ -315,3 +350,34 @@ class TestTeslaLanes(OpenpilotTestCase):
     assert 0.0 > first >= -TESLA_MAX_LAT_JERK / V_EGO ** 2 * guard.dt - 1e-12
     settle(guard, md, lines=False, tesla_lane=lane)
     assert settle(guard, md, lines=False, tesla_lane=None, steps=1) < 0.0  # ramps out, does not drop
+
+
+def edge_model(gap, edge_std=0.2):
+  # no trusted lines, straight road edge on the right gap (m) from the body
+  return make_model(1.5 + 0.5 - CAR_HALF_WIDTH - gap, curve=0.0, left_prob=0.1, right_prob=0.1, edge=0.5, edge_std=edge_std)
+
+
+class TestEdgeGuard(OpenpilotTestCase):
+  V = 10.0  # m/s
+
+  def edge_only(self, md, **kwargs):
+    return settle(LaneGuard(), md, lines=False, edge_guard=True, v_ego=kwargs.pop('v_ego', self.V), **kwargs)
+
+  def test_pushes_off_an_edge_next_to_the_car(self):
+    assert self.edge_only(edge_model(0.1)) < 0.0
+    assert self.edge_only(edge_model(0.4)) == 0.0
+
+  def test_toggle_speed_and_trust(self):
+    assert settle(LaneGuard(), edge_model(0.1), lines=False, v_ego=self.V) == 0.0
+    assert self.edge_only(edge_model(0.1), v_ego=EDGE_MAX_SPEED + 1.0) == 0.0
+    assert self.edge_only(edge_model(0.1), v_ego=2.0) == 0.0
+    assert self.edge_only(edge_model(0.1, edge_std=1.5)) == 0.0
+
+  def test_closing_in_pushes_earlier(self):
+    # 0.3 m from the edge is enough while it holds, not while closing in at 0.6 m/s
+    assert self.edge_only(edge_model(0.3)) == 0.0
+    guard = LaneGuard()
+    steps = int(0.5 / DT_CTRL)
+    for i in range(steps + 1):
+      curvature = guard.update(self.V, edge_model(0.6 - 0.3 * i / steps), True, guard=False, edge_guard=True)
+    assert curvature < 0.0
