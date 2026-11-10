@@ -13,6 +13,8 @@ from openpilot.common.swaglog import cloudlog
 from opendbc.car.car_helpers import interfaces
 from opendbc.car.vehicle_model import VehicleModel
 from openpilot.selfdrive.controls.lib.drive_helpers import clip_curvature
+from openpilot.selfdrive.controls.lib.lane_guard import LaneGuard
+from openpilot.selfdrive.controls.lib.tesla_lanes import TeslaLaneReader
 from openpilot.selfdrive.controls.lib.latcontrol import LatControl
 from openpilot.selfdrive.controls.lib.latcontrol_pid import LatControlPID
 from openpilot.selfdrive.controls.lib.latcontrol_angle import LatControlAngle, STEER_ANGLE_SATURATION_THRESHOLD
@@ -50,6 +52,13 @@ class Controls:
     self.pose_calibrator = PoseCalibrator()
     self.calibrated_pose: Pose | None = None
 
+    self.lane_guard = LaneGuard()
+    self.lane_guard_enabled = self.params.get_bool("LaneGuardEnabled")
+    self.tesla_lane_guard_enabled = self.params.get_bool("TeslaLaneGuardEnabled")
+    self.edge_guard_enabled = self.params.get_bool("EdgeGuardEnabled")
+    self.curb_line_enabled = self.params.get_bool("CurbLineEnabled")
+    self.tesla_lanes = TeslaLaneReader()
+    self.left_hand_traffic = self.params.get_bool("IsRhdDetected")  # a right-hand drive car most likely drives on the left
     self.LoC = LongControl(self.CP)
     self.VM = VehicleModel(self.CP)
     self.LaC: LatControl
@@ -120,10 +129,24 @@ class Controls:
 
     # Steering PID loop and lateral MPC
     # Reset desired curvature to current to avoid violating the limits on engage
+    if self.sm.frame % int(1. / DT_CTRL) == 0:
+      self.lane_guard_enabled = self.params.get_bool("LaneGuardEnabled")
+      self.tesla_lane_guard_enabled = self.params.get_bool("TeslaLaneGuardEnabled")
+      self.edge_guard_enabled = self.params.get_bool("EdgeGuardEnabled")
+      self.curb_line_enabled = self.params.get_bool("CurbLineEnabled")
+      self.left_hand_traffic = self.params.get_bool("IsRhdDetected")
+    tesla_lane = None
+    if self.tesla_lane_guard_enabled:
+      self.tesla_lanes.update()
+      tesla_lane = self.tesla_lanes.get()
+    lane_guard_active = (self.lane_guard_enabled or self.tesla_lane_guard_enabled or self.edge_guard_enabled) and CC.latActive and not CS.steeringPressed
+    lane_guard_curvature = self.lane_guard.update(CS.vEgo, model_v2, lane_guard_active, CS.leftBlinker or CS.rightBlinker, self.left_hand_traffic,
+                                                  guard=self.lane_guard_enabled, tesla_lane=tesla_lane, edge_guard=self.edge_guard_enabled,
+                                                  curb_line=self.curb_line_enabled)
     if self.sm.valid['lateralManeuverPlan']:
       new_desired_curvature = self.sm['lateralManeuverPlan'].desiredCurvature if CC.latActive else self.curvature
     else:
-      new_desired_curvature = model_v2.action.desiredCurvature if CC.latActive else self.curvature
+      new_desired_curvature = model_v2.action.desiredCurvature + lane_guard_curvature if CC.latActive else self.curvature
     self.desired_curvature, curvature_limited = clip_curvature(CS.vEgo, self.desired_curvature, new_desired_curvature, lp.roll)
     lat_delay = self.sm["lateralDelay"].lateralDelay + LAT_SMOOTH_SECONDS
 
