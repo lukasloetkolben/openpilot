@@ -85,16 +85,6 @@ class DeveloperLayoutMici(NavScroller):
                                                     "Braking (AEB).")
     self._lane_guard_toggle = BigParamControl("lane guard", "LaneGuardEnabled",
                                               description="Gently steer away from lane lines the car is about to cross.")
-    self._tesla_lane_guard_toggle = BigParamControl("tesla lane guard", "TeslaLaneGuardEnabled",
-                                                    description="Keep the car inside the lane Tesla's Autopilot computer sees, also where the center " +
-                                                                "line is faded and on wide roads. Only where its lane bends like openpilot's path, " +
-                                                                "not on slow straights.")
-    self._edge_guard_toggle = BigParamControl("edge guard", "EdgeGuardEnabled",
-                                              description="Below 60 km/h, steer away from a curb or road edge right next to the car, " +
-                                                          "also when the car is closing in on it.")
-    self._curb_line_toggle = BigParamControl("curb line", "CurbLineEnabled",
-                                             description="In tight bends, treat a faint line just inside the road edge as the curb, " +
-                                                         "where the road edge lies behind a curb strip.")
     self._navigation_toggle = BigParamControl("navigation (alpha)", "NavigationEnabled",
                                               description="Turn-by-turn navigation with a route map. Set a destination from comma connect.")
     self._debug_mode_toggle = BigParamControl("ui debug mode", "ShowDebugInfo",
@@ -106,9 +96,6 @@ class DeveloperLayoutMici(NavScroller):
       self._ssh_toggle,
       self._ssh_keys_btn,
       self._lane_guard_toggle,
-      self._tesla_lane_guard_toggle,
-      self._edge_guard_toggle,
-      self._curb_line_toggle,
       self._joystick_toggle,
       self._long_maneuver_toggle,
       self._lat_maneuver_toggle,
@@ -122,9 +109,6 @@ class DeveloperLayoutMici(NavScroller):
       ("AdbEnabled", self._adb_toggle),
       ("SshEnabled", self._ssh_toggle),
       ("LaneGuardEnabled", self._lane_guard_toggle),
-      ("TeslaLaneGuardEnabled", self._tesla_lane_guard_toggle),
-      ("EdgeGuardEnabled", self._edge_guard_toggle),
-      ("CurbLineEnabled", self._curb_line_toggle),
       ("JoystickDebugMode", self._joystick_toggle),
       ("LongitudinalManeuverMode", self._long_maneuver_toggle),
       ("LateralManeuverMode", self._lat_maneuver_toggle),

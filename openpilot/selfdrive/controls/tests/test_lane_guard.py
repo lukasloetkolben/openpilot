@@ -1,14 +1,10 @@
-from types import SimpleNamespace
-
 import numpy as np
 
 from openpilot.cereal import log
-from openpilot.common.realtime import DT_CTRL
 from openpilot.common.test import OpenpilotTestCase
-from openpilot.selfdrive.controls.lib.lane_guard import CAR_HALF_WIDTH, EDGE_MAX_SPEED, LANE_CHANGE_COOLDOWN, MAX_LAT_ACCEL, MAX_LAT_JERK, \
-                                                       TESLA_MAX_LAT_JERK, LaneGuard, combine, get_room_scale
+from openpilot.selfdrive.controls.lib.lane_guard import CAR_HALF_WIDTH, LANE_CHANGE_COOLDOWN, MAX_LAT_ACCEL, MAX_LAT_JERK, LaneGuard, \
+                                                       get_room_scale
 from openpilot.selfdrive.controls.lib.ldw import CAMERA_OFFSET
-from openpilot.selfdrive.controls.lib.tesla_lanes import MAX_AGE, TeslaLaneReader, parse_das_lanes
 from openpilot.selfdrive.modeld.constants import ModelConstants
 
 V_EGO = 20.0
@@ -40,10 +36,9 @@ def make_model(car_y=0.0, lane_width=3.0, left_prob=0.9, right_prob=0.9, lane_ch
   return md
 
 
-def settle(guard, md, active=True, steps=500, blinker=False, left_hand_traffic=False, v_ego=V_EGO, lines=True, tesla_lane=None, edge_guard=False,
-           curb_line=False):
+def settle(guard, md, active=True, steps=500, blinker=False, left_hand_traffic=False, v_ego=V_EGO):
   for _ in range(steps):
-    curvature = guard.update(v_ego, md, active, blinker, left_hand_traffic, lines, tesla_lane, edge_guard, curb_line)
+    curvature = guard.update(v_ego, md, active, blinker, left_hand_traffic)
   return curvature
 
 
@@ -212,88 +207,6 @@ class TestLaneGuard(OpenpilotTestCase):
     settle(guard, md)
     assert settle(guard, md, active=False) == 0.0
 
-
-def das_lanes_bytes(width_idx=3, view=80, c0=0.0, c1=0.0, c2=0.0, c3=0.0, left_usage=2, right_usage=2):
-  return bytes([width_idx << 4, view, round((c0 + 3.5) / 0.035), round((c1 + 0.2) / 0.0016), round((c2 + 0.0025) / 2e-5),
-                round((c3 + 3e-5) / 2.4e-7), left_usage | (right_usage << 2), 0])
-
-
-def can_event(dat, src=2, address=0x239):
-  return SimpleNamespace(can=[SimpleNamespace(src=src, address=address, dat=dat)])
-
-
-def tesla_only(md, lane, **kwargs):
-  # Tesla lane guard alone, lane guard off
-  return settle(LaneGuard(), md, lines=False, tesla_lane=lane, **kwargs)
-
-
-class TestTeslaLanes(OpenpilotTestCase):
-  def test_parse(self):
-    lane = parse_das_lanes(das_lanes_bytes(width_idx=3, view=80, c0=0.35, c2=1 / 1000.))
-    assert lane.width == 2.9375 and lane.view_range == 80.0
-    assert abs(lane.coeffs[0] - 0.35) < 0.02 and abs(lane.coeffs[1]) < 0.001 and abs(lane.coeffs[2] - 1 / 1000.) < 2e-5
-    assert lane.left_usage == 2 and lane.right_usage == 2
-    assert parse_das_lanes(b'\x00' * 7) is None
-
-  def test_reader_keeps_newest_and_ages_out(self):
-    reader = TeslaLaneReader(sock=False)
-    reader.feed([can_event(das_lanes_bytes(c0=0.35)), can_event(das_lanes_bytes(c0=-0.35))])  # newest first
-    assert reader.get().coeffs[0] > 0.0
-    for _ in range(int(MAX_AGE / DT_CTRL) + 1):
-      reader.feed([])
-    assert reader.get() is None
-
-  def test_reader_ignores_other_bus_and_short_view(self):
-    reader = TeslaLaneReader(sock=False)
-    reader.feed([can_event(das_lanes_bytes(), src=0), can_event(das_lanes_bytes(), address=0x238)])
-    assert reader.get() is None
-    reader.feed([can_event(das_lanes_bytes(view=5))])
-    assert reader.get() is None
-
-  def test_pushes_off_tesla_lane_edge(self):
-    # openpilot sees no lines at all, Tesla's 2.94 m lane is straight and centered on the car
-    lane = parse_das_lanes(das_lanes_bytes(width_idx=3))
-    over = 2.9375 / 2 - CAR_HALF_WIDTH + 0.10
-    md = make_model(over, curve=0.0, left_prob=0.1, right_prob=0.1, edge_std=1.5)
-    assert settle(LaneGuard(), md) == 0.0
-    assert tesla_only(md, lane) < 0.0
-    assert tesla_only(make_model(-over, curve=0.0, left_prob=0.1, right_prob=0.1, edge_std=1.5), lane) > 0.0
-
-  def test_inside_tesla_lane_does_nothing(self):
-    lane = parse_das_lanes(das_lanes_bytes(width_idx=3))
-    assert tesla_only(make_model(0.1, curve=0.0), lane) == 0.0
-
-  def test_off_on_slow_straights(self):
-    # like the lines: the model leaves the lane there on purpose, e.g. to keep away from parked cars
-    lane = parse_das_lanes(das_lanes_bytes(width_idx=3))
-    md = make_model(2.9375 / 2 - CAR_HALF_WIDTH + 0.10, curve=0.0)
-    assert tesla_only(md, lane, v_ego=SLOW) == 0.0
-    assert tesla_only(md, lane, v_ego=5.0) == 0.0
-    assert tesla_only(md, lane) < 0.0
-
-  def test_guards_slow_bends_like_the_plan(self):
-    lane = parse_das_lanes(das_lanes_bytes(width_idx=3, c2=CURVE / 2))
-    md = make_model(2.9375 / 2 - CAR_HALF_WIDTH + 0.10)
-    assert tesla_only(md, lane, v_ego=5.0) < 0.0
-    assert tesla_only(md, lane, v_ego=2.0) == 0.0
-
-  def test_off_where_tesla_lane_bends_unlike_the_plan(self):
-    # in bends Tesla's lane is straighter than the road and lies outward, a plan following the road looks like a cut
-    md = make_model(2.9375 / 2 - CAR_HALF_WIDTH + 0.10, curve=CURVE)
-    assert tesla_only(md, parse_das_lanes(das_lanes_bytes(width_idx=3, c2=CURVE / 2))) < 0.0
-    assert tesla_only(md, parse_das_lanes(das_lanes_bytes(width_idx=3, c2=CURVE / 2 * 0.4))) == 0.0
-    assert tesla_only(md, parse_das_lanes(das_lanes_bytes(width_idx=3))) == 0.0
-
-  def test_no_push_toward_a_close_line(self):
-    # Tesla pushes right, openpilot's trusted right line is only 0.08 m from the body: no room, no push
-    lane = parse_das_lanes(das_lanes_bytes(width_idx=3))
-    car_y = -(2.9375 / 2 - CAR_HALF_WIDTH + 0.10)  # body 0.1 m over the left edge of Tesla's lane
-    md = make_model(car_y, curve=0.0, left_prob=0.1, edge_std=1.5)
-    md.laneLines[2].y = np.full(len(md.laneLines[2].x), car_y + CAR_HALF_WIDTH + 0.08).tolist()
-    assert tesla_only(md, lane) == 0.0
-    md.laneLineProbs = [0.5, 0.1, 0.1, 0.5]
-    assert tesla_only(md, lane) > 0.0
-
   def test_room_scale(self):
     path_x = V_EGO * np.array(ModelConstants.T_IDXS)
     path_y = np.full(len(path_x), CAMERA_OFFSET)
@@ -305,121 +218,3 @@ class TestTeslaLanes(OpenpilotTestCase):
     assert get_room_scale(0.01, path_x, path_y, None, line_at(0.05)) == 0.0
     assert get_room_scale(-0.01, path_x, path_y, None, line_at(0.05)) == 1.0  # pushing left, nothing known there
     assert get_room_scale(0.01, path_x, path_y, None, None) == 1.0
-
-  def test_paused_with_blinker(self):
-    lane = parse_das_lanes(das_lanes_bytes(width_idx=3))
-    assert tesla_only(make_model(2.9375 / 2 - CAR_HALF_WIDTH + 0.10, curve=0.0), lane, blinker=True) == 0.0
-
-  def test_beyond_view_range_ignored(self):
-    lane = parse_das_lanes(das_lanes_bytes(width_idx=3, view=12))
-    assert tesla_only(make_model(2.9375 / 2 - CAR_HALF_WIDTH + 0.10, curve=0.0), lane) == 0.0
-
-  def test_follows_tesla_lane_in_curve(self):
-    # Tesla's lane curves right with the road, a plan holding the middle of it is fine, one cutting to the inside is pushed out
-    lane = parse_das_lanes(das_lanes_bytes(width_idx=3, c2=CURVE / 2))
-    assert tesla_only(make_model(0.0), lane) == 0.0
-    assert tesla_only(make_model(2.9375 / 2 - CAR_HALF_WIDTH), lane) < 0.0
-
-  def test_combines_with_line_guard(self):
-    # both push away from the same line: the stronger wins, not the sum
-    lane = parse_das_lanes(das_lanes_bytes(width_idx=3))
-    md = make_model(1.5 - CAR_HALF_WIDTH + 0.1, lane_width=3.0, curve=0.0)
-    guard_only, tesla, both = settle(LaneGuard(), md), tesla_only(md, lane), settle(LaneGuard(), md, tesla_lane=lane)
-    assert both == min(guard_only, tesla)
-    assert combine(1.0, -0.4) == 0.6 and combine(-1.0, -0.4) == -1.0 and combine(0.0, 0.3) == 0.3
-
-  def test_skips_a_lane_the_car_is_not_in(self):
-    edge_over = 2.9375 / 2 - CAR_HALF_WIDTH
-    # the lowest width code
-    assert tesla_only(make_model(2.0 / 2 - CAR_HALF_WIDTH + 0.1, curve=0.0), parse_das_lanes(das_lanes_bytes(width_idx=0))) == 0.0
-    # the body is already 0.4 m outside Tesla's lane
-    assert tesla_only(make_model(edge_over + 0.4, curve=0.0), parse_das_lanes(das_lanes_bytes(width_idx=3))) == 0.0
-
-  def test_skips_a_plan_going_another_way(self):
-    # starts inside Tesla's lane, 1.5 s ahead it is far outside: a turn or fork Tesla's lane does not take
-    lane = parse_das_lanes(das_lanes_bytes(width_idx=3))
-    md = make_model(0.0, curve=0.0)
-    path_x = np.array(md.position.x)
-    md.position.y = (np.array(md.position.y) + 1 / 150. / 2 * path_x ** 2).tolist()
-    assert tesla_only(md, lane) == 0.0
-
-  def test_ramps_with_lower_jerk(self):
-    lane = parse_das_lanes(das_lanes_bytes(width_idx=3))
-    md = make_model(2.9375 / 2 - CAR_HALF_WIDTH + 0.10, curve=0.0, left_prob=0.1, right_prob=0.1, edge_std=1.5)
-    guard = LaneGuard()
-    first = guard.update(V_EGO, md, True, guard=False, tesla_lane=lane)
-    assert 0.0 > first >= -TESLA_MAX_LAT_JERK / V_EGO ** 2 * guard.dt - 1e-12
-    settle(guard, md, lines=False, tesla_lane=lane)
-    assert settle(guard, md, lines=False, tesla_lane=None, steps=1) < 0.0  # ramps out, does not drop
-
-
-def edge_model(gap, edge_std=0.2):
-  # no trusted lines, straight road edge on the right gap (m) from the body
-  return make_model(1.5 + 0.5 - CAR_HALF_WIDTH - gap, curve=0.0, left_prob=0.1, right_prob=0.1, edge=0.5, edge_std=edge_std)
-
-
-class TestEdgeGuard(OpenpilotTestCase):
-  V = 10.0  # m/s
-
-  def edge_only(self, md, **kwargs):
-    return settle(LaneGuard(), md, lines=False, edge_guard=True, v_ego=kwargs.pop('v_ego', self.V), **kwargs)
-
-  def test_pushes_off_an_edge_next_to_the_car(self):
-    assert self.edge_only(edge_model(0.1)) < 0.0
-    assert self.edge_only(edge_model(0.4)) == 0.0
-
-  def test_toggle_speed_and_trust(self):
-    assert settle(LaneGuard(), edge_model(0.1), lines=False, v_ego=self.V) == 0.0
-    assert self.edge_only(edge_model(0.1), v_ego=EDGE_MAX_SPEED + 1.0) == 0.0
-    assert self.edge_only(edge_model(0.1), v_ego=2.0) == 0.0
-    assert self.edge_only(edge_model(0.1, edge_std=1.5)) == 0.0
-
-  def test_closing_in_pushes_earlier(self):
-    # 0.3 m from the edge is enough while it holds, not while closing in at 0.6 m/s
-    assert self.edge_only(edge_model(0.3)) == 0.0
-    guard = LaneGuard()
-    steps = int(0.5 / DT_CTRL)
-    for i in range(steps + 1):
-      curvature = guard.update(self.V, edge_model(0.6 - 0.3 * i / steps), True, guard=False, edge_guard=True)
-    assert curvature < 0.0
-
-
-def curb_model(gap=0.05, strip=0.5, curve=1 / 100., right_prob=0.3, right_std=0.2, left_hand_traffic=False):
-  # a bend with a faint curb side line gap (m) from the body and the road edge strip (m) behind it, as behind a curb strip
-  lane_width = 3.0
-  car_y = lane_width / 2 - CAR_HALF_WIDTH - gap
-  if left_hand_traffic:
-    md = make_model(-car_y, lane_width, left_prob=right_prob, right_prob=0.9, curve=curve, edge=strip)
-    md.laneLineStds = [0.1, right_std, 0.1, 0.1]
-  else:
-    md = make_model(car_y, lane_width, left_prob=0.9, right_prob=right_prob, curve=curve, edge=strip)
-    md.laneLineStds = [0.1, 0.1, right_std, 0.1]
-  return md
-
-
-class TestCurbLine(OpenpilotTestCase):
-  V = 10.0  # m/s
-
-  def curb(self, md, **kwargs):
-    return settle(LaneGuard(), md, v_ego=self.V, **kwargs)
-
-  def test_faint_line_inside_the_edge_is_the_curb(self):
-    # the road edge 0.55 m away is no reason to push, the curb face 5 cm away is
-    assert self.curb(curb_model()) == 0.0
-    assert self.curb(curb_model(), curb_line=True) < 0.0
-    assert self.curb(curb_model(), lines=False, edge_guard=True, curb_line=True) < 0.0
-    assert self.curb(curb_model(gap=0.6), curb_line=True) == 0.0
-
-  def test_only_in_tight_bends_toward_the_curb(self):
-    assert self.curb(curb_model(curve=1 / 500.), curb_line=True) == 0.0
-    assert self.curb(curb_model(curve=-1 / 100.), curb_line=True) == 0.0
-
-  def test_only_a_sure_line_just_inside_the_edge(self):
-    assert self.curb(curb_model(right_std=0.5), curb_line=True) == 0.0
-    assert self.curb(curb_model(strip=0.8), curb_line=True) == 0.0
-    # a line beyond the road edge changes nothing, the edge is guarded as is
-    assert self.curb(curb_model(strip=-0.2), curb_line=True) == self.curb(curb_model(strip=-0.2))
-
-  def test_left_hand_traffic_mirrors(self):
-    assert self.curb(curb_model(curve=-1 / 100., left_hand_traffic=True), left_hand_traffic=True, curb_line=True) > 0.0
-    assert self.curb(curb_model(left_hand_traffic=True), left_hand_traffic=True, curb_line=True) == 0.0
