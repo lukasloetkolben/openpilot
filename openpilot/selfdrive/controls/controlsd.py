@@ -12,14 +12,16 @@ from openpilot.common.swaglog import cloudlog
 
 from opendbc.car.car_helpers import interfaces
 from opendbc.car.vehicle_model import VehicleModel
-from openpilot.selfdrive.controls.lib.drive_helpers import clip_curvature
-from openpilot.selfdrive.controls.lib.lane_guard import LaneGuard
+from openpilot.common.filter_simple import FirstOrderFilter
+from openpilot.selfdrive.controls.lib.drive_helpers import clip_curvature, get_lane_center_curvature
+from openpilot.selfdrive.controls.lib.lane_guard import LaneGuard, combine
 from openpilot.selfdrive.controls.lib.latcontrol import LatControl
 from openpilot.selfdrive.controls.lib.latcontrol_pid import LatControlPID
 from openpilot.selfdrive.controls.lib.latcontrol_angle import LatControlAngle, STEER_ANGLE_SATURATION_THRESHOLD
 from openpilot.selfdrive.controls.lib.latcontrol_curvature import LatControlCurvature
 from openpilot.selfdrive.controls.lib.latcontrol_torque import LatControlTorque
 from openpilot.selfdrive.controls.lib.longcontrol import LongControl
+from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.modeld.modeld import LAT_SMOOTH_SECONDS
 from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
 
@@ -53,6 +55,8 @@ class Controls:
 
     self.lane_guard = LaneGuard()
     self.lane_guard_enabled = self.params.get_bool("LaneGuardEnabled")
+    self.lane_center_enabled = self.params.get_bool("LaneCenterEnabled")
+    self.lane_center = FirstOrderFilter(0.0, 0.5, DT_CTRL)
     self.left_hand_traffic = self.params.get_bool("IsRhdDetected")  # a right-hand drive car most likely drives on the left
     self.LoC = LongControl(self.CP)
     self.VM = VehicleModel(self.CP)
@@ -126,13 +130,24 @@ class Controls:
     # Reset desired curvature to current to avoid violating the limits on engage
     if self.sm.frame % int(1. / DT_CTRL) == 0:
       self.lane_guard_enabled = self.params.get_bool("LaneGuardEnabled")
+      self.lane_center_enabled = self.params.get_bool("LaneCenterEnabled")
       self.left_hand_traffic = self.params.get_bool("IsRhdDetected")
     lane_guard_active = self.lane_guard_enabled and CC.latActive and not CS.steeringPressed
     lane_guard_curvature = self.lane_guard.update(CS.vEgo, model_v2, lane_guard_active, CS.leftBlinker or CS.rightBlinker, self.left_hand_traffic)
+    # comma plan-long-curve: the model sits ~0.3 m to the inside of curves, the plan 2 s ahead is steered halfway to the lane center.
+    # Off in lane changes, the filter fades it out and back in. Pushing the same way as the lane guard, the stronger one wins
+    lane_center = 0.0
+    lane_change = model_v2.meta.laneChangeState in (log.LaneChangeState.laneChangeStarting, log.LaneChangeState.laneChangeFinishing)
+    if self.lane_center_enabled and CC.latActive and not CS.steeringPressed and not lane_change and len(model_v2.laneLines) == 4 and \
+       len(model_v2.laneLineProbs) == 4 and len(model_v2.position.x) == ModelConstants.IDX_N:
+      lines = model_v2.laneLines
+      lane_center = get_lane_center_curvature(CS.vEgo, model_v2.position.x, model_v2.position.y, lines[1].x, lines[1].y, lines[2].y,
+                                              model_v2.laneLineProbs[1], model_v2.laneLineProbs[2])
+    lane_curvature = combine(lane_guard_curvature, self.lane_center.update(lane_center))
     if self.sm.valid['lateralManeuverPlan']:
       new_desired_curvature = self.sm['lateralManeuverPlan'].desiredCurvature if CC.latActive else self.curvature
     else:
-      new_desired_curvature = model_v2.action.desiredCurvature + lane_guard_curvature if CC.latActive else self.curvature
+      new_desired_curvature = model_v2.action.desiredCurvature + lane_curvature if CC.latActive else self.curvature
     self.desired_curvature, curvature_limited = clip_curvature(CS.vEgo, self.desired_curvature, new_desired_curvature, lp.roll)
     lat_delay = self.sm["lateralDelay"].lateralDelay + LAT_SMOOTH_SECONDS
 
