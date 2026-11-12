@@ -19,7 +19,7 @@ from openpilot.common.swaglog import cloudlog
 
 J_CRUISE_VALS = [1.6, 1.2, 0.8, 0.6]
 J_CRUISE_BP = [0., 10.0, 25., 40.]
-A_CRUISE_MIN = -0.5
+A_CRUISE_MIN = -1.0
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 
 
