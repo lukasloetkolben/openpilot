@@ -3,15 +3,17 @@ import numpy as np
 
 import openpilot.cereal.messaging as messaging
 from opendbc.car.interfaces import ACCEL_MIN, ACCEL_MAX
-from openpilot.common.constants import CV
+from opendbc.car.structs import car
+from openpilot.common.constants import ACCELERATION_DUE_TO_GRAVITY, CV
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.modeld.constants import ModelConstants
-from openpilot.selfdrive.controls.lib.curve_speed import CurveSpeed
+from openpilot.selfdrive.controls.lib.curve_speed import ANGLE_LAG_LIMIT, CurveSpeed, steer_lag
 from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LongitudinalMpc, LongitudinalPlanSource
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDXS as T_IDXS_MPC
-from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N, get_accel_from_plan, should_stop, smooth_value
+from openpilot.selfdrive.controls.lib.drive_helpers import (CONTROL_N, MAX_LATERAL_ACCEL_NO_ROLL, MIN_SPEED,
+                                                          get_accel_from_plan, should_stop, smooth_value)
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.common.swaglog import cloudlog
 
@@ -97,8 +99,19 @@ class LongitudinalPlanner:
     output_a_target_mpc = get_accel_from_plan(self.v_desired_trajectory, self.a_desired_trajectory, CONTROL_N_T_IDX,
                                               action_t=action_t)
     output_should_stop_mpc = should_stop(v_ego, output_a_target_mpc)
-    curve_offset = self.curve_speed.update(sm['modelV2'], sm['vehicleParameters'].roll)
-    output_a_target_e2e = sm['modelV2'].action.desiredAcceleration + curve_offset
+    lac = getattr(sm['controlsState'].lateralControlState, sm['controlsState'].lateralControlState.which())
+    roll = sm['vehicleParameters'].roll
+    # how close steering is to its limit (1.0 = at it), at any speed: torque output, or the lateral accel limit clip_curvature applies
+    if self.CP.steerControlType == car.CarParams.SteerControlType.torque:
+      saturation = abs(lac.output)
+    else:
+      lat_accel = sm['controlsState'].desiredCurvature * max(v_ego, MIN_SPEED) ** 2 - ACCELERATION_DUE_TO_GRAVITY * roll
+      saturation = abs(lat_accel) / MAX_LATERAL_ACCEL_NO_ROLL
+      if self.CP.steerControlType == car.CarParams.SteerControlType.angle:
+        # the wheel lagging behind the requested angle (EPS and rate limits in tight, slow turns)
+        saturation = max(saturation, steer_lag(lac.steeringAngleDesiredDeg, lac.steeringAngleDeg) / ANGLE_LAG_LIMIT)
+    output_a_target_e2e = self.curve_speed.update(sm['modelV2'], roll, sm['modelV2'].action.desiredAcceleration,
+                                                  saturation if lac.active else 0.0)
     output_should_stop_e2e = sm['modelV2'].action.shouldStop
 
     self.a_cruise = get_cruise_accel(v_cruise, v_ego, self.a_cruise, self.output_a_target, self.dt)
