@@ -52,7 +52,7 @@ class RouteEngine:
     self.recompute_hold = 0
     self.reroute_counter = 0
 
-    self.mapbox_token = os.environ.get("MAPBOX_TOKEN")
+    self.mapbox_token = os.environ.get("MAPBOX_TOKEN") or self.params.get("MapboxToken") or None
     self.api = Api(self.params.get("DongleId")) if self.mapbox_token is None else None
     self.mapbox_host = "https://api.mapbox.com" if self.mapbox_token is not None else API_HOST.rstrip('/') + '/v1/nav'
 
