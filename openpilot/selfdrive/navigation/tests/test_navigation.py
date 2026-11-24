@@ -260,8 +260,10 @@ class TestRouteEngine(unittest.TestCase):
     distance = 111.195  # Mapbox's length of 0.001 degrees at the equator
     self.response = mapbox_response([
       {'geometry': {'coordinates': [[0, 0], [0.0005, 0], [0.001, 0]]}, 'distance': distance, 'duration': 10,
+       'maneuver': {'type': 'depart'},
        'bannerInstructions': [{'distanceAlongGeometry': 100, 'primary': {'text': 'Turn right', 'type': 'turn', 'modifier': 'right'}}]},
-      {'geometry': {'coordinates': [[0.001, 0], [0.002, 0]]}, 'distance': distance, 'duration': 10, 'bannerInstructions': []},
+      {'geometry': {'coordinates': [[0.001, 0], [0.002, 0]]}, 'distance': distance, 'duration': 10,
+       'maneuver': {'type': 'turn', 'modifier': 'right'}, 'bannerInstructions': []},
     ])
 
   def last_message(self, service):
@@ -290,6 +292,14 @@ class TestRouteEngine(unittest.TestCase):
     self.engine.last_position = (0.001, 0)  # at the maneuver
     self.engine.send_instruction()
     self.assertAlmostEqual(self.last_message('navInstruction').navInstruction.maneuverDistance, 0, delta=0.01)
+
+  def test_all_maneuvers(self):
+    self.load_route()
+    self.engine.last_position = (0.0005, 0)  # halfway to the turn
+    self.engine.send_instruction()
+    maneuvers = self.last_message('navInstruction').navInstruction.allManeuvers
+    self.assertEqual([(m.type, m.modifier) for m in maneuvers], [('turn', 'right')])  # the passed depart is gone
+    self.assertAlmostEqual(maneuvers[0].distance, 55.6, delta=0.5)
 
   def test_banner_selection(self):
     banners = [{'distanceAlongGeometry': 100, 'primary': {'text': 'Turn right', 'type': 'turn', 'modifier': 'right'}},
