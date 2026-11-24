@@ -36,6 +36,8 @@ from openpilot.common.transformations.camera import DEVICE_CAMERAS
 from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
 from openpilot.common.transformations.model import get_warp_matrix
 from openpilot.selfdrive.controls.lib.desire_helper import DesireHelper
+from openpilot.selfdrive.modeld import tuned_model
+from openpilot.selfdrive.modeld.nav_intent import NavIntent
 from openpilot.selfdrive.controls.lib.drive_helpers import get_accel_from_plan, should_stop, smooth_value, get_curvature_from_plan
 from openpilot.selfdrive.modeld.parse_model_outputs import Parser
 from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_driving_model_data, fill_pose_msg, PublishState
@@ -242,7 +244,8 @@ def main(demo=False):
   cloudlog.warning("modeld init")
 
   # a cable is a chestnut on its way, unless a USB host is on it
-  CHESTNUT = chestnut_compiled() and (chestnut_present() or (cable_connected() and not usb_host_connected()))
+  # while the tuned model waits to be compiled, the compiler has the Chestnut and modeld runs the small model
+  CHESTNUT = chestnut_compiled() and not tuned_model.pending() and (chestnut_present() or (cable_connected() and not usb_host_connected()))
   if CHESTNUT:
     from tinygrad.runtime.ops_amd import AMDDevice
     AMDDevice.wait_timeout_ms = 3000
@@ -315,7 +318,7 @@ def main(demo=False):
   pub_socks = ["modelV2", "drivingModelData", "cameraOdometry"] + (["chestnutGpuState"] if CHESTNUT else [])
   pm = PubMaster(pub_socks)
   sm = SubMaster(["deviceState", "carState", "narrowRoadCameraState", "extrinsicsCalibration", "driverMonitoringState",
-                  "carControl", "controlsState", "lateralDelay"])
+                  "carControl", "controlsState", "lateralDelay", "navInstruction"])
 
   publish_state = PublishState()
   params = Params()
@@ -346,6 +349,9 @@ def main(demo=False):
   prev_action = log.ModelDataV2.Action()
 
   DH = DesireHelper()
+  # only the fine-tuned big model was trained on turn intent; stock models never saw turnLeft/turnRight
+  NI = NavIntent() if CHESTNUT and tuned_model.installed() else None
+  cloudlog.warning(f"nav intent: {'on' if NI is not None else 'off'}")
 
   while True:
     # Keep receiving frames until we are at least 1 frame ahead of previous extra frame
@@ -402,6 +408,12 @@ def main(demo=False):
     vec_desire = np.zeros(ModelConstants.DESIRE_LEN, dtype=np.float32)
     if desire >= 0 and desire < ModelConstants.DESIRE_LEN:
       vec_desire[desire] = 1
+    if NI is not None:
+      # a lane change keeps its own desire, otherwise the turn intent pulses
+      nav_age = time.monotonic() - sm.recv_time['navInstruction'] if sm.seen['navInstruction'] and sm.valid['navInstruction'] else None
+      intent = NI.update(sm['navInstruction'], nav_age, sm['carState'], v_ego, DH.lane_change_state != log.LaneChangeState.off)
+      if desire == log.Desire.none and model.chestnut:
+        vec_desire = intent
 
     # tracked dropped frames
     vipc_dropped_frames = max(0, meta_main.frame_id - last_vipc_frame_id - 1)
