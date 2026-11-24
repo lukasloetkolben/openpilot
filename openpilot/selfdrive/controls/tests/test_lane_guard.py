@@ -2,8 +2,9 @@ import numpy as np
 
 from openpilot.cereal import log
 from openpilot.common.test import OpenpilotTestCase
-from openpilot.selfdrive.controls.lib.lane_guard import CAR_HALF_WIDTH, LANE_CHANGE_COOLDOWN, MAX_LAT_ACCEL, MAX_LAT_JERK, LaneGuard, \
-                                                       get_room_scale
+from openpilot.selfdrive.controls.lib.lane_guard import CAR_HALF_WIDTH, CENTRE_HOLD, LANE_CHANGE_COOLDOWN, LINE_FADE_T, MARGIN, \
+                                                       LOOKAHEAD_T, MAX_LAT_ACCEL, MAX_LAT_JERK, ROOM_MIN, LaneGuard, \
+                                                       get_centre_hold, get_shift
 from openpilot.selfdrive.controls.lib.ldw import CAMERA_OFFSET
 from openpilot.selfdrive.modeld.constants import ModelConstants
 
@@ -207,14 +208,67 @@ class TestLaneGuard(OpenpilotTestCase):
     settle(guard, md)
     assert settle(guard, md, active=False) == 0.0
 
-  def test_room_scale(self):
+  def test_room_cap(self):
+    # a push never takes the plan closer than ROOM_MIN to a line on the side it pushes to
     path_x = V_EGO * np.array(ModelConstants.T_IDXS)
     path_y = np.full(len(path_x), CAMERA_OFFSET)
     line_x = np.array(ModelConstants.X_IDXS)
-    def line_at(room):
-      return line_x, np.full(len(line_x), CAR_HALF_WIDTH + room)
-    assert get_room_scale(0.01, path_x, path_y, None, line_at(0.5)) == 1.0
-    assert abs(get_room_scale(0.01, path_x, path_y, None, line_at(0.2)) - 0.5) < 1e-6
-    assert get_room_scale(0.01, path_x, path_y, None, line_at(0.05)) == 0.0
-    assert get_room_scale(-0.01, path_x, path_y, None, line_at(0.05)) == 1.0  # pushing left, nothing known there
-    assert get_room_scale(0.01, path_x, path_y, None, None) == 1.0
+    def line_at(y):
+      return line_x, np.full(len(line_x), y)
+    left = line_at(-CAR_HALF_WIDTH + 0.05)  # 5 cm over the left line
+    def shift(room):
+      return get_shift(path_x, path_y, left, None, None, None, None, line_at(CAR_HALF_WIDTH + room), None, (1.0, 0.0), MARGIN)[0]
+    assert np.all(shift(1.0) > 0.0)
+    assert np.allclose(shift(ROOM_MIN + 0.05), 0.05)
+    assert np.all(shift(ROOM_MIN - 0.05) == 0.0)
+
+  def test_never_past_centre(self):
+    # far over the left line of a lane only a little wider than the car: the push aims at the centre, not beyond it
+    path_x = V_EGO * np.array(ModelConstants.T_IDXS)
+    car_y = -0.8
+    path_y = np.full(len(path_x), car_y + CAMERA_OFFSET)
+    line_x = np.array(ModelConstants.X_IDXS)
+    left, right = (line_x, np.full(len(line_x), -1.1)), (line_x, np.full(len(line_x), 1.1))
+    def centre(x):
+      return np.zeros_like(x)
+    shift = get_shift(path_x, path_y, left, right, None, None, left, right, centre, (1.0, 1.0), MARGIN)[0]
+    assert np.all(shift > 0.0)
+    assert np.all(car_y + shift <= 1e-9)
+
+  def test_holds_centre_after_push(self):
+    # after pushing away from the left line, a plan carrying the car past the centre is held back for CENTRE_HOLD
+    guard = LaneGuard()
+    settle(guard, make_model(-(1.3 - CAR_HALF_WIDTH + 0.05), lane_width=2.6))
+    past = make_model(0.3, lane_width=3.6)
+    assert settle(guard, past, steps=int(1.0 / guard.dt)) < 0.0
+    assert settle(guard, past, steps=int(2 * CENTRE_HOLD / guard.dt)) == 0.0  # hold over, released with the jerk limit
+    # without a push before, the same plan is left alone
+    assert settle(LaneGuard(), past) == 0.0
+    # and it never takes the car back closer than MARGIN to the line it was pushed away from
+    path_x = V_EGO * np.array(ModelConstants.T_IDXS)
+    car, shift = np.full(len(LOOKAHEAD_T), 0.3), np.zeros(len(LOOKAHEAD_T))
+    line_x = np.array(ModelConstants.X_IDXS)
+    left = (line_x, np.full(len(line_x), 0.3 - CAR_HALF_WIDTH - MARGIN - 0.1))
+    hold = get_centre_hold(path_x, car, shift, np.zeros(len(LOOKAHEAD_T)), left, None, 1.0)
+    assert np.allclose(hold, -0.1)
+
+  def test_smooth_onset(self):
+    # the plan drifting slowly toward the left line: the push starts from zero and grows steadily, no on-off
+    guard = LaneGuard()
+    curvatures = []
+    for car_y in np.linspace(-0.1, -(1.3 - CAR_HALF_WIDTH + 0.1), 600):
+      curvatures.append(guard.update(V_EGO, make_model(car_y, lane_width=2.6), True))
+    accel = np.array(curvatures) * V_EGO ** 2
+    assert accel[0] == 0.0 and accel[-1] > 0.1
+    assert np.all(np.diff(accel) >= -1e-9)
+    assert np.max(np.diff(accel)) < 0.5 * MAX_LAT_JERK * guard.dt
+
+  def test_line_fades_in(self):
+    # a line that just became trusted is guarded fully only after LINE_FADE_T
+    car_y = -(1.3 - CAR_HALF_WIDTH + 0.05)
+    full = settle(LaneGuard(), make_model(car_y, lane_width=2.6))
+    guard = LaneGuard()
+    settle(guard, make_model(car_y, lane_width=2.6, left_prob=0.3))
+    guard.filtered = guard.accel = 0.0
+    early = settle(guard, make_model(car_y, lane_width=2.6), steps=int(0.5 * LINE_FADE_T / guard.dt))
+    assert 0.0 < early < full
