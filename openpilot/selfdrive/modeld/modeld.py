@@ -34,7 +34,7 @@ from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import config_realtime_process, DT_MDL
 from openpilot.common.transformations.camera import DEVICE_CAMERAS
 from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
-from openpilot.common.transformations.model import get_warp_matrix
+from openpilot.common.transformations.model import get_warp_matrix, sbigmodel_fl
 from openpilot.selfdrive.controls.lib.desire_helper import DesireHelper
 from openpilot.selfdrive.modeld import tuned_model
 from openpilot.selfdrive.modeld.nav_intent import NavIntent
@@ -352,6 +352,9 @@ def main(demo=False):
   # only the fine-tuned big model was trained on turn intent; stock models never saw turnLeft/turnRight
   NI = NavIntent() if CHESTNUT and tuned_model.installed() else None
   cloudlog.warning(f"nav intent: {'on' if NI is not None else 'off'}")
+  # a tuned big model may be trained on a wider wide crop (run4: 80 deg); stock and small models stay at 59 deg
+  wide_fl = tuned_model.wide_focal() if CHESTNUT else sbigmodel_fl
+  cloudlog.warning(f"wide model focal: {wide_fl}")
 
   while True:
     # Keep receiving frames until we are at least 1 frame ahead of previous extra frame
@@ -399,7 +402,7 @@ def main(demo=False):
       model_transform_main = get_warp_matrix(device_from_calib_euler, main_intrinsics, False).astype(np.float32)
       has_wide_camera = use_extra_client or main_wide_camera
       extra_intrinsics = dc.wide_road.intrinsics if has_wide_camera else dc.narrow_road.intrinsics
-      model_transform_extra = get_warp_matrix(device_from_calib_euler, extra_intrinsics, True).astype(np.float32)
+      model_transform_extra = get_warp_matrix(device_from_calib_euler, extra_intrinsics, True, wide_fl).astype(np.float32)
       extrinsics_calibration_seen = True
 
     traffic_convention = np.zeros(2)

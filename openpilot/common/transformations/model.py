@@ -62,8 +62,18 @@ calib_from_medmodel = np.linalg.inv(medmodel_frame_from_calib_frame[:, :3])
 calib_from_sbigmodel = np.linalg.inv(sbigmodel_frame_from_calib_frame[:, :3])
 
 # This function is verified to give similar results to xx.uncommon.utils.transform_img
-def get_warp_matrix(device_from_calib_euler: np.ndarray, intrinsics: np.ndarray, bigmodel_frame: bool = False) -> np.ndarray:
-  calib_from_model = calib_from_sbigmodel if bigmodel_frame else calib_from_medmodel
+def calib_from_sbigmodel_fl(fl: float) -> np.ndarray:
+  """calib_from_sbigmodel for a wide model frame zoomed to focal fl (same principal point, 455 = stock 59 deg)"""
+  if fl == sbigmodel_fl:
+    return calib_from_sbigmodel
+  intrinsics = sbigmodel_intrinsics.copy()
+  intrinsics[0, 0] = intrinsics[1, 1] = fl
+  return np.linalg.inv((intrinsics @ get_view_frame_from_calib_frame(0, 0, 0, 0))[:, :3])
+
+
+def get_warp_matrix(device_from_calib_euler: np.ndarray, intrinsics: np.ndarray, bigmodel_frame: bool = False,
+                    sbig_fl: float = sbigmodel_fl) -> np.ndarray:
+  calib_from_model = calib_from_sbigmodel_fl(sbig_fl) if bigmodel_frame else calib_from_medmodel
   device_from_calib = rot_from_euler(device_from_calib_euler)
   camera_from_calib = intrinsics @ view_frame_from_device_frame @ device_from_calib
   warp_matrix: np.ndarray = camera_from_calib @ calib_from_model

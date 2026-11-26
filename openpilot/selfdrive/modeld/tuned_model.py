@@ -5,6 +5,7 @@ Drop the ONNX at TUNED_ONNX (with its sha256 in TUNED_SHA). This process compile
 original pkl once as .orig and swaps the new one in. Until then modeld leaves the Chestnut alone and runs the small
 model, so the two never share it. Roll back: delete TUNED_ONNX and copy the .orig back.
 """
+import json
 import os
 import shutil
 import subprocess
@@ -14,12 +15,15 @@ from pathlib import Path
 
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
+from openpilot.common.transformations.model import sbigmodel_fl
 from openpilot.selfdrive.modeld.helpers import chestnut_present, modeld_pkl_path
 
 BASEDIR = Path(__file__).resolve().parents[3]
 TUNED_DIR = Path(os.environ.get("TUNED_MODEL_DIR", "/data/opft"))
 TUNED_ONNX = TUNED_DIR / "tuned.onnx"
 TUNED_SHA = TUNED_DIR / "tuned.onnx.sha256"
+# optional {"sha256": "<onnx sha>", "wide_focal": 305.08}: wide view the tuned policy was trained on (default 455 = 59 deg)
+TUNED_CFG = TUNED_DIR / "tuned.json"
 BIG_PKL = modeld_pkl_path(chestnut=True)
 INFO = BIG_PKL.with_name(BIG_PKL.name + ".info")  # "<onnx sha256> <pkl size>" of the installed tuned model
 COMPILE_ENV = {"DEV": "USB+AMD:LLVM", "GMMU": "0", "AM_POWER_LIMIT": "100"}  # as modeld runs it
@@ -40,6 +44,18 @@ def installed() -> bool:
     return sha is not None and info_sha == sha and int(size) == BIG_PKL.stat().st_size
   except (OSError, ValueError):
     return False
+
+
+def wide_focal() -> float:
+  """wide model-frame focal of the installed tuned model; its config must name the same onnx, else stock 455"""
+  try:
+    cfg = json.loads(TUNED_CFG.read_text())
+    fl = float(cfg["wide_focal"])
+    if installed() and cfg["sha256"] == _expected_sha() and 200.0 <= fl <= 600.0:
+      return fl
+  except (OSError, ValueError, KeyError, TypeError):
+    pass
+  return sbigmodel_fl
 
 
 def pending() -> bool:
