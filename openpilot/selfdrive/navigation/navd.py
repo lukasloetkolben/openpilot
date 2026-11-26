@@ -10,6 +10,7 @@ from openpilot.common.params import Params
 from openpilot.common.realtime import Ratekeeper
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.navigation.helpers import latest_gps_source
+from openpilot.selfdrive.navigation.places import TripRecorder
 from openpilot.selfdrive.navigation.route import RouteTracker, along_path, local_meters
 
 REROUTE_DISTANCE = 25
@@ -48,6 +49,7 @@ class RouteEngine:
     self.route_geometry = None  # an (n, 2) array of (longitude, latitude) per step
     self.route_tracker = None
     self.maneuver_distances = None
+    self.trip = TripRecorder(self.params)
 
     self.recompute_hold = 0
     self.reroute_counter = 0
@@ -63,6 +65,7 @@ class RouteEngine:
     if source is not None:
       gps = self.sm[source]
       self.last_position, self.last_bearing = (gps.longitude, gps.latitude), gps.bearingDeg
+      self.trip.update(gps.latitude, gps.longitude)
     route = self.route
     try:
       self.recompute_route(gps_ok=source is not None)
@@ -230,9 +233,12 @@ def main():
 
   rk = Ratekeeper(1.0)
   route_engine = RouteEngine(sm, pm)
-  while True:
-    route_engine.update()
-    rk.keep_time()
+  try:
+    while True:
+      route_engine.update()
+      rk.keep_time()
+  finally:
+    route_engine.trip.save()  # where the drive ended, manager stops navd when the car turns off
 
 
 if __name__ == "__main__":
