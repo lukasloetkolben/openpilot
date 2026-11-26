@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- nothing leaves this page: no requests, no external scripts -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Mapbox Token QR</title>
+<style>
+  :root {
+    --bg: #f6f6f4; --card: #ffffff; --text: #16181a; --muted: #686d72; --line: #dcdfe2;
+    --accent: #1f8a4c; --warn: #b4461e; --field: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d0f10; --card: #16191b; --text: #eceeef; --muted: #9aa1a6; --line: #2a2f33;
+      --accent: #48c47c; --warn: #f08a5d; --field: #0f1112;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d0f10; --card: #16191b; --text: #eceeef; --muted: #9aa1a6; --line: #2a2f33;
+    --accent: #48c47c; --warn: #f08a5d; --field: #0f1112;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    display: flex; justify-content: center; padding: 32px 16px;
+  }
+  main { width: 100%; max-width: 440px; }
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 0 0 24px; font-size: 15px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; }
+  label { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 8px; }
+  .row { display: flex; gap: 8px; }
+  input {
+    flex: 1; min-width: 0; font: 15px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text);
+    background: var(--field); border: 1px solid var(--line); border-radius: 10px; padding: 12px;
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+  button {
+    font: 600 14px inherit; font-family: inherit; color: var(--text); background: transparent;
+    border: 1px solid var(--line); border-radius: 10px; padding: 0 14px; cursor: pointer;
+  }
+  .msg { min-height: 22px; margin: 10px 0 0; font-size: 14px; color: var(--muted); }
+  .msg.bad { color: var(--warn); }
+  .msg.good { color: var(--accent); }
+  .qr {
+    margin-top: 16px; background: #fff; border-radius: 12px; aspect-ratio: 1; display: flex;
+    align-items: center; justify-content: center; overflow: hidden;
+  }
+  .qr svg { width: 100%; height: 100%; display: block; }
+  .qr .empty { color: #9aa1a6; font-size: 14px; padding: 24px; text-align: center; }
+  ol { color: var(--muted); font-size: 14px; padding-left: 20px; margin: 20px 4px 0; }
+  li { margin: 4px 0; }
+  .note { color: var(--muted); font-size: 13px; margin-top: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Mapbox token to comma</h1>
+  <p class="sub">Turn your Mapbox public token into a QR code, then scan it with the comma's driver camera.</p>
+
+  <div class="card">
+    <label for="token">Public token (starts with pk.)</label>
+    <div class="row">
+      <input id="token" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="pk.eyJ1Ijoi…">
+      <button id="show" type="button" aria-pressed="false">Show</button>
+    </div>
+    <p id="msg" class="msg"></p>
+    <div class="qr" id="qr"><div class="empty">The QR code appears here</div></div>
+  </div>
+
+  <ol>
+    <li>On the comma: settings, navigation, mapbox token.</li>
+    <li>Turn the phone's brightness up and hold it 20 to 30 cm in front of the driver camera.</li>
+    <li>Keep it still until the comma says the token is saved.</li>
+  </ol>
+  <p class="note">The token never leaves this page: the QR code is drawn in your browser and the page can't send anything.
+    Only use a public token (pk.), restricted to the Directions and Search APIs.</p>
+</main>
+
+<script>
+"use strict";
+// QR code, byte mode, error correction M, versions 1-10 (after Nayuki's reference encoder)
+const ECC_PER_BLOCK = [0, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26];
+const NUM_BLOCKS = [0, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5];
+
+function gfMul(x, y) {
+  let z = 0;
+  for (let i = 7; i >= 0; i--) {
+    z = (z << 1) ^ ((z >>> 7) * 0x11d);
+    z ^= ((y >>> i) & 1) * x;
+  }
+  return z;
+}
+function rsDivisor(degree) {
+  const r = new Array(degree).fill(0);
+  r[degree - 1] = 1;
+  let root = 1;
+  for (let i = 0; i < degree; i++) {
+    for (let j = 0; j < r.length; j++) {
+      r[j] = gfMul(r[j], root);
+      if (j + 1 < r.length) r[j] ^= r[j + 1];
+    }
+    root = gfMul(root, 0x02);
+  }
+  return r;
+}
+function rsRemainder(data, divisor) {
+  const r = divisor.map(() => 0);
+  for (const b of data) {
+    const f = b ^ r.shift();
+    r.push(0);
+    divisor.forEach((c, i) => { r[i] ^= gfMul(c, f); });
+  }
+  return r;
+}
+function rawModules(ver) {
+  let n = (16 * ver + 128) * ver + 64;
+  if (ver >= 2) {
+    const a = Math.floor(ver / 7) + 2;
+    n -= (25 * a - 10) * a - 55;
+    if (ver >= 7) n -= 36;
+  }
+  return n;
+}
+const dataCodewords = ver => Math.floor(rawModules(ver) / 8) - ECC_PER_BLOCK[ver] * NUM_BLOCKS[ver];
+
+function encode(text) {
+  const bytes = Array.from(new TextEncoder().encode(text));
+  let ver = 1;
+  for (; ver <= 10; ver++) if (4 + (ver < 10 ? 8 : 16) + bytes.length * 8 <= dataCodewords(ver) * 8) break;
+  if (ver > 10) throw new Error("too long");
+
+  const bits = [];
+  const put = (v, n) => { for (let i = n - 1; i >= 0; i--) bits.push((v >>> i) & 1); };
+  put(4, 4);
+  put(bytes.length, ver < 10 ? 8 : 16);
+  bytes.forEach(b => put(b, 8));
+  const cap = dataCodewords(ver) * 8;
+  put(0, Math.min(4, cap - bits.length));
+  put(0, (8 - bits.length % 8) % 8);
+  for (let pad = 0xec; bits.length < cap; pad ^= 0xec ^ 0x11) put(pad, 8);
+  const data = [];
+  for (let i = 0; i < bits.length; i += 8) data.push(parseInt(bits.slice(i, i + 8).join(""), 2));
+
+  // error correction, interleaved
+  const numBlocks = NUM_BLOCKS[ver], eccLen = ECC_PER_BLOCK[ver], raw = Math.floor(rawModules(ver) / 8);
+  const numShort = numBlocks - raw % numBlocks, shortLen = Math.floor(raw / numBlocks);
+  const div = rsDivisor(eccLen), blocks = [];
+  for (let i = 0, k = 0; i < numBlocks; i++) {
+    const dat = data.slice(k, k + shortLen - eccLen + (i < numShort ? 0 : 1));
+    k += dat.length;
+    const ecc = rsRemainder(dat, div);
+    if (i < numShort) dat.push(0);
+    blocks.push(dat.concat(ecc));
+  }
+  const codewords = [];
+  for (let i = 0; i < blocks[0].length; i++)
+    blocks.forEach((b, j) => { if (i !== shortLen - eccLen || j >= numShort) codewords.push(b[i]); });
+
+  // function patterns
+  const size = ver * 4 + 17;
+  const mod = [...Array(size)].map(() => new Array(size).fill(false));
+  const fn = [...Array(size)].map(() => new Array(size).fill(false));
+  const set = (x, y, d) => { mod[y][x] = d; fn[y][x] = true; };
+  for (let i = 0; i < size; i++) { set(6, i, i % 2 === 0); set(i, 6, i % 2 === 0); }
+  for (const [cx, cy] of [[3, 3], [size - 4, 3], [3, size - 4]])
+    for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+      const x = cx + dx, y = cy + dy, d = Math.max(Math.abs(dx), Math.abs(dy));
+      if (x >= 0 && x < size && y >= 0 && y < size) set(x, y, d !== 2 && d !== 4);
+    }
+  if (ver > 1) {
+    const n = Math.floor(ver / 7) + 2, step = Math.ceil((ver * 4 + 4) / (n * 2 - 2)) * 2, pos = [6];
+    for (let p = size - 7; pos.length < n; p -= step) pos.splice(1, 0, p);
+    pos.forEach((x, i) => pos.forEach((y, j) => {
+      if ((i === 0 && j === 0) || (i === 0 && j === n - 1) || (i === n - 1 && j === 0)) return;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) set(x + dx, y + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+    }));
+  }
+  const drawFormat = mask => {
+    const d = (0 << 3) | mask;  // M is 0b00
+    let r = d;
+    for (let i = 0; i < 10; i++) r = (r << 1) ^ ((r >>> 9) * 0x537);
+    const b = ((d << 10) | r) ^ 0x5412, bit = i => ((b >>> i) & 1) === 1;
+    for (let i = 0; i <= 5; i++) set(8, i, bit(i));
+    set(8, 7, bit(6)); set(8, 8, bit(7)); set(7, 8, bit(8));
+    for (let i = 9; i < 15; i++) set(14 - i, 8, bit(i));
+    for (let i = 0; i < 8; i++) set(size - 1 - i, 8, bit(i));
+    for (let i = 8; i < 15; i++) set(8, size - 15 + i, bit(i));
+    set(8, size - 8, true);
+  };
+  drawFormat(0);
+  if (ver >= 7) {
+    let r = ver;
+    for (let i = 0; i < 12; i++) r = (r << 1) ^ ((r >>> 11) * 0x1f25);
+    const b = (ver << 12) | r;
+    for (let i = 0; i < 18; i++) {
+      const d = ((b >>> i) & 1) === 1, a = size - 11 + i % 3, c = Math.floor(i / 3);
+      set(a, c, d); set(c, a, d);
+    }
+  }
+
+  // data, zigzag from the bottom right
+  let i = 0;
+  for (let right = size - 1; right >= 1; right -= 2) {
+    if (right === 6) right = 5;
+    for (let v = 0; v < size; v++) for (let j = 0; j < 2; j++) {
+      const x = right - j, y = ((right + 1) & 2) === 0 ? size - 1 - v : v;
+      if (!fn[y][x] && i < codewords.length * 8) {
+        mod[y][x] = ((codewords[i >>> 3] >>> (7 - (i & 7))) & 1) === 1;
+        i++;
+      }
+    }
+  }
+
+  // the mask with the fewest long runs and blocks, and the best dark/light balance
+  const masks = [
+    (x, y) => (x + y) % 2 === 0, (x, y) => y % 2 === 0, (x, y) => x % 3 === 0, (x, y) => (x + y) % 3 === 0,
+    (x, y) => (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0, (x, y) => (x * y) % 2 + (x * y) % 3 === 0,
+    (x, y) => ((x * y) % 2 + (x * y) % 3) % 2 === 0, (x, y) => ((x + y) % 2 + (x * y) % 3) % 2 === 0,
+  ];
+  const apply = m => { for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (!fn[y][x] && masks[m](x, y)) mod[y][x] = !mod[y][x]; };
+  const penalty = () => {
+    let p = 0, dark = 0;
+    for (let a = 0; a < size; a++) {
+      let rr = 1, rc = 1;
+      for (let b = 1; b < size; b++) {
+        if (mod[a][b] === mod[a][b - 1]) { if (++rr === 5) p += 3; else if (rr > 5) p++; } else rr = 1;
+        if (mod[b][a] === mod[b - 1][a]) { if (++rc === 5) p += 3; else if (rc > 5) p++; } else rc = 1;
+      }
+    }
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      if (mod[y][x]) dark++;
+      if (x < size - 1 && y < size - 1) {
+        const c = mod[y][x];
+        if (c === mod[y][x + 1] && c === mod[y + 1][x] && c === mod[y + 1][x + 1]) p += 3;
+      }
+    }
+    return p + Math.floor(Math.abs(dark * 20 - size * size * 10) / (size * size)) * 10;
+  };
+  let best = 0, bestP = Infinity;
+  for (let m = 0; m < 8; m++) {
+    apply(m); drawFormat(m);
+    const p = penalty();
+    if (p < bestP) { best = m; bestP = p; }
+    apply(m);
+  }
+  apply(best); drawFormat(best);
+  return mod;
+}
+
+function svg(mod) {
+  const q = 4, n = mod.length + q * 2;
+  let path = "";
+  mod.forEach((row, y) => row.forEach((d, x) => { if (d) path += `M${x + q} ${y + q}h1v1h-1z`; }));
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges" role="img" aria-label="QR code of the token">` +
+         `<rect width="${n}" height="${n}" fill="#fff"/><path d="${path}" fill="#000"/></svg>`;
+}
+
+const input = document.getElementById("token"), msg = document.getElementById("msg"), qr = document.getElementById("qr");
+const TOKEN = /^pk\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+function update() {
+  const t = input.value.trim();
+  msg.className = "msg";
+  if (!t) {
+    msg.textContent = "";
+    qr.innerHTML = '<div class="empty">The QR code appears here</div>';
+    return;
+  }
+  if (t.startsWith("sk.")) {
+    msg.className = "msg bad";
+    msg.textContent = "That's a secret token. Use a public one (pk.), the comma stores it in plain text.";
+  } else if (!TOKEN.test(t)) {
+    msg.className = "msg bad";
+    msg.textContent = "Not a Mapbox public token yet: pk.<part>.<part>";
+  } else {
+    msg.className = "msg good";
+    msg.textContent = "Ready to scan";
+  }
+  if (msg.className === "msg bad") {
+    qr.innerHTML = '<div class="empty">The comma only accepts public tokens</div>';
+    return;
+  }
+  try {
+    qr.innerHTML = svg(encode(t));
+  } catch (e) {
+    msg.className = "msg bad";
+    msg.textContent = "Too long for a QR code the camera can read";
+  }
+}
+input.addEventListener("input", update);
+document.getElementById("show").addEventListener("click", e => {
+  const shown = input.type === "text";
+  input.type = shown ? "password" : "text";
+  e.target.textContent = shown ? "Show" : "Hide";
+  e.target.setAttribute("aria-pressed", String(!shown));
+});
+</script>
+</body>
+</html>
