@@ -70,7 +70,7 @@ class PlaceButton(BigButton):
 
 def _subtitle(place: Place, count: bool = False) -> str:
   """when or how often on top, the town below: long addresses get cut at the end, not the useful part"""
-  first = f"{place.count} drives" if count else _ago(place.t) if place.t else ""
+  first = f"{place.count} visits" if count else _ago(place.t) if place.t else ""
   second = place.address or f"{place.lat:.4f}, {place.lon:.4f}"
   return f"{first}\n{second}" if first else second
 

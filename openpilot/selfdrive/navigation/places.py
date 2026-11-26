@@ -27,7 +27,7 @@ class Place:
   lon: float
   name: str = ""
   address: str = ""
-  count: int = 0   # drives that started or ended here
+  count: int = 0   # visits
   t: float = 0.0   # last time it was visited or picked
 
 
@@ -44,12 +44,18 @@ def is_mapbox_token(text: str) -> bool:
 
 
 def _stops(trips) -> list[tuple[float, float, float]]:
-  """(lat, lon, t) of each start and end of drives that went somewhere"""
+  """(lat, lon, t) of each visit: every arrival, and a start only where the drive before didn't end (a gap in the
+  history), so parking somewhere and driving off again is one visit"""
   stops = []
-  for trip in trips:
+  prev_end = None
+  for trip in sorted(trips, key=lambda t: t["t"]):
     start, end = tuple(trip["start"]), tuple(trip["end"])
-    if distance_m(start, end) >= MIN_TRIP_M:
-      stops += [(*start, trip["t"]), (*end, trip.get("t_end", trip["t"]))]
+    if distance_m(start, end) < MIN_TRIP_M:
+      continue
+    if prev_end is None or distance_m(prev_end, start) >= SAME_PLACE_M:
+      stops.append((*start, trip["t"]))
+    stops.append((*end, trip.get("t_end", trip["t"])))
+    prev_end = end
   return stops
 
 
@@ -69,10 +75,11 @@ def _cluster(stops) -> list[Place]:
 
 
 def name_of(names, lat: float, lon: float) -> tuple[str, str]:
+  """the name you picked for the place, else the nearest address found for it"""
   near = [n for n in names if distance_m((n["lat"], n["lon"]), (lat, lon)) < SAME_PLACE_M]
   if not near:
     return "", ""
-  n = min(near, key=lambda n: distance_m((n["lat"], n["lon"]), (lat, lon)))
+  n = min(near, key=lambda n: (not n.get("picked"), distance_m((n["lat"], n["lon"]), (lat, lon))))
   return n["name"], n.get("address", "")
 
 
@@ -110,12 +117,12 @@ def set_destination(params, place: Place):
   recents.insert(0, {"lat": place.lat, "lon": place.lon, "name": place.name, "address": place.address, "t": time.time()})  # noqa: TID251 dates outlive reboots
   params.put(RECENTS, recents[:MAX_RECENTS])
   if place.name:
-    remember_name(params, place.lat, place.lon, place.name, place.address)
+    remember_name(params, place.lat, place.lon, place.name, place.address, picked=True)
 
 
-def remember_name(params, lat: float, lon: float, name: str, address: str):
+def remember_name(params, lat: float, lon: float, name: str, address: str, picked: bool = False):
   names = [n for n in (params.get(NAMES) or []) if distance_m((n["lat"], n["lon"]), (lat, lon)) >= SAME_PLACE_M / 3]
-  names.insert(0, {"lat": lat, "lon": lon, "name": name, "address": address})
+  names.insert(0, {"lat": lat, "lon": lon, "name": name, "address": address, "picked": picked})
   params.put(NAMES, names[:MAX_NAMES])
 
 
