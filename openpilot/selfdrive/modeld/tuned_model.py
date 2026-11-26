@@ -80,7 +80,7 @@ def main():
       ok = compile_tuned()
       params.put_bool("TunedModelCompiling", False)
       failures = 0 if ok else failures + 1
-      if ok and params.get_bool("IsOnroad") and not params.get_bool("IsEngaged"):
+      if ok and not params.get_bool("IsOffroad") and not params.get_bool("IsEngaged"):
         params.put_bool("OnroadCycleRequested", True)  # modeld picks up the big model now, not on the next drive
     time.sleep(10)
 
