@@ -53,13 +53,24 @@ class ProfileActionButton(Widget):
       gui_label(self._rect, "Aa", 30, color=color, alignment=TextAlignment.CENTER)
 
 
+def _is_lpa_code(data: str) -> bool:
+  try:
+    parse_lpa_activation_code(data)
+  except ValueError:
+    return False
+  return True
+
+
 class QRScannerDialog(NavWidget):
   SCAN_INTERVAL_S = 0.25
   INVALID_CODE_DURATION_S = 1.0
 
-  def __init__(self, on_qr_detected: Callable[[str], None]):
+  def __init__(self, on_qr_detected: Callable[[str], None], validator: Callable[[str], bool] | None = None,
+               invalid_text: str = "not an LPA code"):
     super().__init__()
     self._on_qr_detected = on_qr_detected
+    self._validator = validator or _is_lpa_code
+    self._invalid_text = invalid_text
     self._camera_view = CabinCameraView("camerad", VisionStreamType.VISION_STREAM_CABIN)
     self._detected = False
     self._last_scan_time = 0.0
@@ -94,9 +105,7 @@ class QRScannerDialog(NavWidget):
       self._scan_thread = None
       data = self._scan_result
       if data is not None:
-        try:
-          parse_lpa_activation_code(data)
-        except ValueError:
+        if not self._validator(data):
           self._invalid_code_until = now + self.INVALID_CODE_DURATION_S
           self._last_scan_time = self._invalid_code_until
         else:
@@ -127,7 +136,7 @@ class QRScannerDialog(NavWidget):
     else:
       label_y = rect.y + rect.height * 3 / 4
       label_rect = rl.Rectangle(rect.x, label_y + (rect.height - label_y) / 2 - 20, rect.width, 40)
-      text = "not an LPA code" if rl.get_time() < self._invalid_code_until else "hold QR code to camera"
+      text = self._invalid_text if rl.get_time() < self._invalid_code_until else "hold QR code to camera"
       gui_label(label_rect, text, font_size=32, font_weight=FontWeight.MEDIUM,
                 alignment=TextAlignment.CENTER,
                 color=rl.Color(255, 255, 255, int(255 * 0.9)))

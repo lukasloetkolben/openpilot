@@ -2,6 +2,7 @@ from openpilot.common.params import Params
 from openpilot.system.ui.widgets.scroller import NavScroller
 from openpilot.selfdrive.ui.mici.widgets.button import BigButton
 from openpilot.selfdrive.ui.mici.layouts.settings.driving import DrivingLayoutMici
+from openpilot.selfdrive.ui.mici.layouts.settings.navigation import NavigationLayoutMici, nav_icon
 from openpilot.selfdrive.ui.mici.layouts.settings.network.network_layout import NetworkLayoutMici
 from openpilot.selfdrive.ui.mici.layouts.settings.device.device_layout import DeviceLayoutMici
 from openpilot.selfdrive.ui.mici.layouts.settings.developer import DeveloperLayoutMici
@@ -23,6 +24,10 @@ class SettingsLayout(NavScroller):
     driving_panel = DrivingLayoutMici()
     driving_btn = SettingsBigButton("driving", "", gui_app.texture("icons_mici/wheel.png", 64, 64))
     driving_btn.set_click_callback(lambda: gui_app.push_widget(driving_panel))
+
+    navigation_panel = NavigationLayoutMici()
+    navigation_btn = SettingsBigButton("navigation", "", nav_icon(64))
+    navigation_btn.set_click_callback(lambda: gui_app.push_widget(navigation_panel))
 
     network_panel = NetworkLayoutMici()
     network_btn = SettingsBigButton("network", "", gui_app.texture("icons_mici/settings/network/wifi_strength_full.png", 76, 56))
@@ -46,6 +51,7 @@ class SettingsLayout(NavScroller):
 
     self._scroller.add_widgets([
       driving_btn,
+      navigation_btn,
       network_btn,
       self._device_button,
       software_btn,
