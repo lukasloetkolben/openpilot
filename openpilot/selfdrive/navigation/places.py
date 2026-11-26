@@ -115,7 +115,7 @@ def set_destination(params, place: Place):
   params.put("NavDestination", {"latitude": place.lat, "longitude": place.lon, "place_name": place.name})
   recents = [r for r in (params.get(RECENTS) or []) if distance_m((r["lat"], r["lon"]), (place.lat, place.lon)) >= SAME_PLACE_M]
   recents.insert(0, {"lat": place.lat, "lon": place.lon, "name": place.name, "address": place.address, "t": time.time()})  # noqa: TID251 dates outlive reboots
-  params.put(RECENTS, recents[:MAX_RECENTS])
+  params.put(RECENTS, recents[:MAX_RECENTS], block=True)  # read back right away: put is async otherwise
   if place.name:
     remember_name(params, place.lat, place.lon, place.name, place.address, picked=True)
 
@@ -123,7 +123,7 @@ def set_destination(params, place: Place):
 def remember_name(params, lat: float, lon: float, name: str, address: str, picked: bool = False):
   names = [n for n in (params.get(NAMES) or []) if distance_m((n["lat"], n["lon"]), (lat, lon)) >= SAME_PLACE_M / 3]
   names.insert(0, {"lat": lat, "lon": lon, "name": name, "address": address, "picked": picked})
-  params.put(NAMES, names[:MAX_NAMES])
+  params.put(NAMES, names[:MAX_NAMES], block=True)
 
 
 def current_position(params) -> tuple[float, float] | None:
@@ -204,5 +204,5 @@ class TripRecorder:
       trips[-1] = dict(self.trip)
     else:
       trips.append(dict(self.trip))
-    self.params.put(TRIPS, trips[-MAX_TRIPS:])
+    self.params.put(TRIPS, trips[-MAX_TRIPS:], block=True)
     self.last_save = self.trip["t_end"]

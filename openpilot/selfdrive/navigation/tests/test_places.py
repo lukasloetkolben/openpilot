@@ -16,7 +16,7 @@ class FakeParams:
   def get(self, key):
     return self.values.get(key)
 
-  def put(self, key, value):
+  def put(self, key, value, block=False):
     self.values[key] = value
 
 

@@ -70,7 +70,7 @@ def main():
   trips = sorted(trips + added, key=lambda t: t["t"])[-MAX_TRIPS:]
   print(f"{len(added)} drives added, {len(trips)} in total")
   if not args.dry_run:
-    params.put(TRIPS, trips)
+    params.put(TRIPS, trips, block=True)
 
 
 if __name__ == "__main__":
